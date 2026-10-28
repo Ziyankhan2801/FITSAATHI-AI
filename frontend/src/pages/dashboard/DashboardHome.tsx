@@ -9,7 +9,9 @@ import {
   HeartPulse,
   Target,
 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { checkBackendHealth } from '../../services/api'
 
 const overviewItems = [
   {
@@ -43,8 +45,66 @@ const weeklyDays = [
 ]
 
 export default function DashboardHome() {
+  const [backendStatus, setBackendStatus] = useState<
+    'checking' | 'connected' | 'error'
+  >('checking')
+
+  const [backendMessage, setBackendMessage] = useState(
+    'Checking backend connection...',
+  )
+
+  useEffect(() => {
+    let isMounted = true
+
+    checkBackendHealth()
+      .then((data) => {
+        if (isMounted) {
+          setBackendStatus('connected')
+          setBackendMessage(data.message)
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setBackendStatus('error')
+          setBackendMessage('Backend connection failed.')
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
+      <section
+        aria-live="polite"
+        className="flex items-start gap-3 rounded-xl border border-white/10 bg-[#171a15] p-4"
+      >
+        <span
+          className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
+            backendStatus === 'connected'
+              ? 'bg-[#c5f66a]'
+              : backendStatus === 'error'
+                ? 'bg-red-400'
+                : 'bg-yellow-400'
+          }`}
+        />
+
+        <div>
+          <p className="text-sm font-semibold">
+            Backend:{' '}
+            {backendStatus === 'connected'
+              ? 'Connected'
+              : backendStatus === 'error'
+                ? 'Disconnected'
+                : 'Checking...'}
+          </p>
+
+          <p className="mt-1 text-xs text-white/50">{backendMessage}</p>
+        </div>
+      </section>
+
       <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div>
           <p className="text-sm font-medium text-[#c5f66a]">
@@ -141,7 +201,9 @@ export default function DashboardHome() {
             <Target size={22} />
           </span>
 
-          <h3 className="mt-5 text-xl font-semibold">Let's personalise your plan</h3>
+          <h3 className="mt-5 text-xl font-semibold">
+            Let's personalise your plan
+          </h3>
 
           <p className="mt-3 text-sm leading-6 text-white/55">
             Your goals, experience and available time will help shape a
