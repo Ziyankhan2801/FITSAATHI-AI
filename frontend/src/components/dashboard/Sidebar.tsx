@@ -3,6 +3,7 @@ import {
   Activity,
   BarChart3,
   CalendarDays,
+  ClipboardList,
   Dumbbell,
   HeartPulse,
   LayoutDashboard,
@@ -16,6 +17,11 @@ import { Link, NavLink } from 'react-router-dom'
 const navigationItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
   { label: 'My Workouts', icon: Dumbbell, href: '/dashboard/workouts' },
+  {
+    label: 'Workout History',
+    icon: ClipboardList,
+    href: '/dashboard/workout-history',
+  },
   { label: 'Progress', icon: BarChart3, href: '/dashboard/progress' },
   { label: 'Nutrition', icon: Utensils, href: '/dashboard/nutrition' },
   { label: 'My Schedule', icon: CalendarDays, href: '/dashboard/schedule' },
@@ -76,7 +82,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         <nav
           aria-label="Main navigation"
-          className="flex-1 space-y-1 px-4"
+          className="flex-1 space-y-1 overflow-y-auto px-4"
         >
           {navigationItems.map(({ label, icon: Icon, href }) => (
             <NavLink

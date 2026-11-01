@@ -126,6 +126,10 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
+# Private storage for user-uploaded files
+# These files must never be served through public static/media URLs.
+PRIVATE_MEDIA_ROOT = BASE_DIR / 'private_media'
+
 
 # Django REST Framework
 REST_FRAMEWORK = {
@@ -143,3 +147,18 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
 ]
+
+
+# CSRF: allow the local React development server
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
+
+
+# Allow the browser to send session cookies to the Django API
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = False
+CORS_ALLOW_CREDENTIALS = True
