@@ -424,3 +424,167 @@ def delete_progress_photo_file(sender, instance, **kwargs):
                 store.delete(name) if store.exists(name) else None
             )
         )
+
+
+
+
+class Exercise(models.Model):
+    class Category(models.TextChoices):
+        STRENGTH = 'strength', 'Strength'
+        CARDIO = 'cardio', 'Cardio'
+        FLEXIBILITY = 'flexibility', 'Flexibility'
+        MOBILITY = 'mobility', 'Mobility'
+        BALANCE = 'balance', 'Balance'
+
+    class MuscleGroup(models.TextChoices):
+        CHEST = 'chest', 'Chest'
+        BACK = 'back', 'Back'
+        SHOULDERS = 'shoulders', 'Shoulders'
+        ARMS = 'arms', 'Arms'
+        CORE = 'core', 'Core'
+        LEGS = 'legs', 'Legs'
+        FULL_BODY = 'full_body', 'Full body'
+
+    class Difficulty(models.TextChoices):
+        BEGINNER = 'beginner', 'Beginner'
+        INTERMEDIATE = 'intermediate', 'Intermediate'
+        ADVANCED = 'advanced', 'Advanced'
+
+    class Equipment(models.TextChoices):
+        NONE = 'none', 'No equipment'
+        DUMBBELL = 'dumbbell', 'Dumbbell'
+        RESISTANCE_BAND = 'resistance_band', 'Resistance band'
+        CHAIR = 'chair', 'Chair'
+        MAT = 'mat', 'Exercise mat'
+        OTHER = 'other', 'Other'
+
+    name = models.CharField(max_length=150, unique=True)
+    slug = models.SlugField(max_length=170, unique=True)
+
+    description = models.TextField()
+    instructions = models.JSONField(default=list)
+
+    category = models.CharField(
+        max_length=20,
+        choices=Category.choices,
+        db_index=True,
+    )
+
+    muscle_group = models.CharField(
+        max_length=20,
+        choices=MuscleGroup.choices,
+        db_index=True,
+    )
+
+    difficulty = models.CharField(
+        max_length=20,
+        choices=Difficulty.choices,
+        default=Difficulty.BEGINNER,
+        db_index=True,
+    )
+
+    equipment = models.CharField(
+        max_length=30,
+        choices=Equipment.choices,
+        default=Equipment.NONE,
+    )
+
+    sets = models.PositiveSmallIntegerField(default=2)
+    reps = models.CharField(max_length=50, default='10 reps')
+    rest_seconds = models.PositiveSmallIntegerField(default=60)
+
+    image_url = models.URLField(blank=True)
+    video_url = models.URLField(blank=True)
+    safety_tips = models.TextField(blank=True)
+
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Exercise'
+        verbose_name_plural = 'Exercises'
+
+    def __str__(self):
+        return self.name
+
+
+
+class WorkoutPlan(models.Model):
+    class WorkoutDay(models.IntegerChoices):
+        DAY_1 = 1, 'Day 1'
+        DAY_2 = 2, 'Day 2'
+        DAY_3 = 3, 'Day 3'
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='custom_workout_plans',
+    )
+
+    workout_day = models.PositiveSmallIntegerField(
+        choices=WorkoutDay.choices,
+        validators=[MinValueValidator(1), MaxValueValidator(3)],
+    )
+
+    title = models.CharField(max_length=150)
+    focus = models.CharField(max_length=150, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['workout_day']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'workout_day'],
+                name='unique_user_custom_workout_day',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.title} - User {self.user_id}'
+
+
+class WorkoutPlanExercise(models.Model):
+    workout_plan = models.ForeignKey(
+        WorkoutPlan,
+        on_delete=models.CASCADE,
+        related_name='planned_exercises',
+    )
+
+    exercise = models.ForeignKey(
+        Exercise,
+        on_delete=models.PROTECT,
+        related_name='workout_plan_entries',
+    )
+
+    sets = models.PositiveSmallIntegerField(
+        default=2,
+        validators=[MinValueValidator(1), MaxValueValidator(20)],
+    )
+
+    reps = models.CharField(max_length=50, default='10 reps')
+
+    rest_seconds = models.PositiveSmallIntegerField(
+        default=60,
+        validators=[MaxValueValidator(600)],
+    )
+
+    order = models.PositiveSmallIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['workout_plan', 'exercise'],
+                name='unique_exercise_in_workout_plan',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.exercise.name} - {self.workout_plan.title}'

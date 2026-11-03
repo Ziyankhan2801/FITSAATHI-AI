@@ -11,12 +11,14 @@ import {
   ShieldCheck,
   Utensils,
   X,
+  BookOpen,
 } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 
 const navigationItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
   { label: 'My Workouts', icon: Dumbbell, href: '/dashboard/workouts' },
+  { label: 'Exercise Library', icon: BookOpen, href: '/dashboard/exercise-library' },
   {
     label: 'Workout History',
     icon: ClipboardList,

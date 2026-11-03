@@ -1,12 +1,17 @@
 from django.urls import path
 
 from .views import (
+    WorkoutPlanListCreateView,
+    WorkoutPlanDetailView,
+    WorkoutPlanExerciseCreateView,
+    WorkoutPlanExerciseDetailView,
     BodyMeasurementDetailView,
     BodyMeasurementListCreateView,
     FitnessProfileView,
     PrivacyConsentDetailView,
     PrivacyConsentListCreateView,
     ProgressPhotoDetailView,
+    ProgressPhotoImageView,
     ProgressPhotoListCreateView,
     RegistrationView,
     WorkoutHistoryListView,
@@ -17,6 +22,8 @@ from .views import (
     health_check,
     login_view,
     logout_view,
+    ExerciseListView,
+    ExerciseDetailView,
 )
 
 
@@ -82,4 +89,33 @@ urlpatterns = [
         ProgressPhotoDetailView.as_view(),
         name='progress-photo-detail',
     ),
+    path(
+        'progress-photos/<int:pk>/image/',
+        ProgressPhotoImageView.as_view(),
+        name='progress-photo-image',
+    ),
+    path('exercises/', ExerciseListView.as_view(), name='exercise-list'),
+    path('exercises/<int:pk>/', ExerciseDetailView.as_view(), name='exercise-detail'),
+
+    # Custom Workout Plans
+path(
+    'workout-plans/',
+    WorkoutPlanListCreateView.as_view(),
+    name='workout-plan-list-create',
+),
+path(
+    'workout-plans/<int:pk>/',
+    WorkoutPlanDetailView.as_view(),
+    name='workout-plan-detail',
+),
+path(
+    'workout-plans/<int:plan_id>/exercises/',
+    WorkoutPlanExerciseCreateView.as_view(),
+    name='workout-plan-exercise-create',
+),
+path(
+    'workout-plan-exercises/<int:pk>/',
+    WorkoutPlanExerciseDetailView.as_view(),
+    name='workout-plan-exercise-detail',
+),
 ]

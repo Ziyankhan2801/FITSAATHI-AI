@@ -1,11 +1,21 @@
+from rest_framework import generics, filters
+from rest_framework.permissions import IsAuthenticated
+
+from .models import Exercise
+from .serializers import ExerciseSerializer
+
+import mimetypes
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
+from django.http import FileResponse, Http404
 from django.middleware.csrf import get_token
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -16,6 +26,8 @@ from .models import (
     ProgressPhoto,
     WorkoutHistory,
     WorkoutSession,
+    WorkoutPlan,
+    WorkoutPlanExercise,
 )
 
 from .serializers import (
@@ -26,9 +38,9 @@ from .serializers import (
     RegistrationSerializer,
     WorkoutHistorySerializer,
     WorkoutSessionSerializer,
+    WorkoutPlanSerializer,
+    WorkoutPlanExerciseSerializer,
 )
-
-from rest_framework.parsers import FormParser, MultiPartParser
 
 
 User = get_user_model()
@@ -279,11 +291,9 @@ class PrivacyConsentDetailView(generics.RetrieveUpdateAPIView):
             ).delete()
 
 
-
 class ProgressPhotoListCreateView(generics.ListCreateAPIView):
     """
-    List the authenticated user's progress photos
-    and allow uploads with valid photo-storage consent.
+    List the authenticated user's progress photos and allow consented uploads.
     """
 
     serializer_class = ProgressPhotoSerializer
@@ -301,8 +311,7 @@ class ProgressPhotoListCreateView(generics.ListCreateAPIView):
 
 class ProgressPhotoDetailView(generics.RetrieveDestroyAPIView):
     """
-    Allow users to retrieve or delete only their own photos.
-    File cleanup is handled by the ProgressPhoto deletion signal.
+    Allow users to retrieve or delete only their own photo metadata.
     """
 
     serializer_class = ProgressPhotoSerializer
@@ -311,4 +320,160 @@ class ProgressPhotoDetailView(generics.RetrieveDestroyAPIView):
     def get_queryset(self):
         return ProgressPhoto.objects.filter(
             user=self.request.user
+        )
+
+
+class ProgressPhotoImageView(generics.GenericAPIView):
+    """
+    Stream a private progress photo to its authenticated owner.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request, pk):
+        photo = get_object_or_404(
+            ProgressPhoto.objects.filter(user=request.user),
+            pk=pk,
+        )
+
+        has_consent = PrivacyConsent.objects.filter(
+            user=request.user,
+            consent_type=PrivacyConsent.ConsentType.PHOTO_STORAGE,
+            is_granted=True,
+        ).exists()
+
+        if not has_consent:
+            raise Http404('Photo is not available.')
+
+        try:
+            image_file = photo.image.open('rb')
+        except (FileNotFoundError, OSError, ValueError):
+            raise Http404('Photo file is not available.')
+
+        content_type, _ = mimetypes.guess_type(photo.image.name)
+
+        if content_type not in {
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+        }:
+            image_file.close()
+            raise Http404('Unsupported image format.')
+
+        response = FileResponse(
+            image_file,
+            content_type=content_type,
+        )
+
+        response['Cache-Control'] = 'private, no-store, max-age=0'
+        response['Pragma'] = 'no-cache'
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['Content-Disposition'] = 'inline'
+
+        return response
+
+
+class ExerciseListView(generics.ListAPIView):
+    serializer_class = ExerciseSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+
+    search_fields = ['name', 'description', 'muscle_group']
+    ordering_fields = ['name', 'difficulty', 'category']
+    ordering = ['name']
+
+    def get_queryset(self):
+        queryset = Exercise.objects.filter(is_active=True)
+
+        category = self.request.query_params.get('category')
+        muscle_group = self.request.query_params.get('muscle_group')
+        difficulty = self.request.query_params.get('difficulty')
+        equipment = self.request.query_params.get('equipment')
+
+        if category:
+            queryset = queryset.filter(category=category)
+
+        if muscle_group:
+            queryset = queryset.filter(muscle_group=muscle_group)
+
+        if difficulty:
+            queryset = queryset.filter(difficulty=difficulty)
+
+        if equipment:
+            queryset = queryset.filter(equipment=equipment)
+
+        return queryset
+
+
+class ExerciseDetailView(generics.RetrieveAPIView):
+    serializer_class = ExerciseSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Exercise.objects.filter(is_active=True)
+
+
+
+class WorkoutPlanListCreateView(generics.ListCreateAPIView):
+    serializer_class = WorkoutPlanSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return WorkoutPlan.objects.filter(
+            user=self.request.user
+        ).prefetch_related('planned_exercises__exercise')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class WorkoutPlanDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = WorkoutPlanSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return WorkoutPlan.objects.filter(
+            user=self.request.user
+        ).prefetch_related('planned_exercises__exercise')
+
+
+class WorkoutPlanExerciseCreateView(generics.CreateAPIView):
+    serializer_class = WorkoutPlanExerciseSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        workout_plan = get_object_or_404(
+            WorkoutPlan,
+            pk=self.kwargs['plan_id'],
+            user=self.request.user,
+        )
+
+        exercise = serializer.validated_data['exercise']
+
+        if not exercise.is_active:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({
+                'exercise': 'This exercise is currently unavailable.'
+            })
+
+        if WorkoutPlanExercise.objects.filter(
+            workout_plan=workout_plan,
+            exercise=exercise,
+        ).exists():
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({
+                'exercise': 'This exercise is already in this workout plan.'
+            })
+
+        serializer.save(workout_plan=workout_plan)
+
+
+class WorkoutPlanExerciseDetailView(generics.DestroyAPIView):
+    serializer_class = WorkoutPlanExerciseSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return WorkoutPlanExercise.objects.filter(
+            workout_plan__user=self.request.user
         )

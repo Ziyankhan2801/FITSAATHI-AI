@@ -3,15 +3,15 @@ import {
   BarChart3,
   Dumbbell,
   LayoutDashboard,
-  Utensils,
+  BookOpen,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const mobileItems = [
   { label: 'Home', icon: LayoutDashboard, to: '/dashboard', end: true },
   { label: 'Workouts', icon: Dumbbell, to: '/dashboard/workouts', end: false },
+  { label: 'Exercises', icon: BookOpen, to: '/dashboard/exercise-library', end: false },
   { label: 'Progress', icon: BarChart3, to: '/dashboard/progress', end: false },
-  { label: 'Nutrition', icon: Utensils, to: '/dashboard/nutrition', end: false },
 ]
 
 export default function MobileNav() {

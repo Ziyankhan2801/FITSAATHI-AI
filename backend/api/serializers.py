@@ -1,5 +1,7 @@
 
 import os
+import warnings
+
 from PIL import Image, UnidentifiedImageError
 
 from django.contrib.auth import get_user_model
@@ -14,6 +16,7 @@ from .models import (
     ProgressPhoto,
     WorkoutHistory,
     WorkoutSession,
+    Exercise,
 )
 
 
@@ -382,13 +385,15 @@ class PrivacyConsentSerializer(serializers.ModelSerializer):
 
 class ProgressPhotoSerializer(serializers.ModelSerializer):
     """
-    Accepts an uploaded image but never exposes its private storage path
-    in API responses.
+    Accepts validated progress-photo uploads without exposing private paths.
     """
 
     image = serializers.ImageField(write_only=True)
 
     MAX_IMAGE_SIZE = 5 * 1024 * 1024
+    MAX_IMAGE_WIDTH = 4096
+    MAX_IMAGE_HEIGHT = 4096
+    MAX_IMAGE_PIXELS = 16_000_000
 
     ALLOWED_EXTENSIONS = {
         '.jpg',
@@ -437,20 +442,49 @@ class ProgressPhotoSerializer(serializers.ModelSerializer):
         try:
             value.seek(0)
 
-            with Image.open(value) as uploaded_image:
-                image_format = uploaded_image.format
-                uploaded_image.verify()
-
-            if image_format not in self.ALLOWED_FORMATS:
-                raise serializers.ValidationError(
-                    'Invalid image format.'
+            with warnings.catch_warnings():
+                warnings.simplefilter(
+                    'error',
+                    Image.DecompressionBombWarning,
                 )
+
+                with Image.open(value) as uploaded_image:
+                    image_format = uploaded_image.format
+                    width, height = uploaded_image.size
+
+                    if image_format not in self.ALLOWED_FORMATS:
+                        raise serializers.ValidationError(
+                            'Invalid image format.'
+                        )
+
+                    if width > self.MAX_IMAGE_WIDTH:
+                        raise serializers.ValidationError(
+                            'Image width cannot exceed 4096 pixels.'
+                        )
+
+                    if height > self.MAX_IMAGE_HEIGHT:
+                        raise serializers.ValidationError(
+                            'Image height cannot exceed 4096 pixels.'
+                        )
+
+                    if width * height > self.MAX_IMAGE_PIXELS:
+                        raise serializers.ValidationError(
+                            'Image cannot exceed 16 million pixels.'
+                        )
+
+                    uploaded_image.verify()
 
             value.seek(0)
 
-        except (UnidentifiedImageError, OSError, SyntaxError):
+        except (
+            UnidentifiedImageError,
+            Image.DecompressionBombError,
+            Image.DecompressionBombWarning,
+            OSError,
+            SyntaxError,
+        ):
             raise serializers.ValidationError(
-                'Uploaded file is not a valid image.'
+                'Invalid, corrupted or unsafe image.'
             )
 
         return value
@@ -478,3 +512,116 @@ class ProgressPhotoSerializer(serializers.ModelSerializer):
             })
 
         return attrs
+
+
+
+
+from .models import Exercise
+
+
+class ExerciseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Exercise
+        fields = [
+            'id',
+            'name',
+            'slug',
+            'description',
+            'instructions',
+            'category',
+            'muscle_group',
+            'difficulty',
+            'equipment',
+            'sets',
+            'reps',
+            'rest_seconds',
+            'image_url',
+            'video_url',
+            'safety_tips',
+            'is_active',
+            'created_at',
+            'updated_at',
+        ]
+
+        read_only_fields = [
+            'id',
+            'created_at',
+            'updated_at',
+        ]
+
+
+
+class ExerciseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Exercise
+        fields = [
+            'id',
+            'name',
+            'slug',
+            'description',
+            'instructions',
+            'category',
+            'muscle_group',
+            'difficulty',
+            'equipment',
+            'sets',
+            'reps',
+            'rest_seconds',
+            'image_url',
+            'video_url',
+            'safety_tips',
+            'is_active',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'created_at',
+            'updated_at',
+            'is_active',
+        ]
+
+
+
+from .models import WorkoutPlan, WorkoutPlanExercise
+
+
+class WorkoutPlanExerciseSerializer(serializers.ModelSerializer):
+    exercise_name = serializers.CharField(
+        source='exercise.name',
+        read_only=True,
+    )
+
+    class Meta:
+        model = WorkoutPlanExercise
+        fields = [
+            'id',
+            'exercise',
+            'exercise_name',
+            'sets',
+            'reps',
+            'rest_seconds',
+            'order',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class WorkoutPlanSerializer(serializers.ModelSerializer):
+    planned_exercises = WorkoutPlanExerciseSerializer(
+        many=True,
+        read_only=True,
+    )
+
+    class Meta:
+        model = WorkoutPlan
+        fields = [
+            'id',
+            'workout_day',
+            'title',
+            'focus',
+            'planned_exercises',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']

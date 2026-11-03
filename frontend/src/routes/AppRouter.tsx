@@ -6,11 +6,15 @@ import DashboardHome from '../pages/dashboard/DashboardHome'
 import FitnessAssessment from '../pages/dashboard/FitnessAssessment'
 import MyWorkouts from '../pages/dashboard/MyWorkouts'
 import WorkoutHistory from '../pages/dashboard/WorkoutHistory'
-import NotFound from '../pages/NotFound'
+import Progress from '../pages/dashboard/Progress'
+import ExerciseLibrary from '../pages/dashboard/ExerciseLibrary'
 import PlaceholderPage from '../pages/dashboard/PlaceholderPage'
+import NotFound from '../pages/NotFound'
+
 import DashboardLayout from '../layouts/DashboardLayout'
 import Login from '../pages/auth/Login'
 import Register from '../pages/auth/Register'
+
 import ProtectedRoute from './ProtectedRoute'
 import { AuthProvider } from '../context/AuthContext'
 
@@ -19,10 +23,12 @@ export default function AppRouter() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          {/* Public routes */}
           <Route path="/" element={<App />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
+          {/* Protected dashboard routes */}
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<DashboardHome />} />
@@ -30,19 +36,16 @@ export default function AppRouter() {
               <Route path="workouts" element={<MyWorkouts />} />
 
               <Route
+                path="exercise-library"
+                element={<ExerciseLibrary />}
+              />
+
+              <Route
                 path="workout-history"
                 element={<WorkoutHistory />}
               />
 
-              <Route
-                path="progress"
-                element={
-                  <PlaceholderPage
-                    title="Your Progress"
-                    description="Track your fitness journey, completed workouts and improvements here once progress tracking is implemented."
-                  />
-                }
-              />
+              <Route path="progress" element={<Progress />} />
 
               <Route
                 path="nutrition"
@@ -81,6 +84,7 @@ export default function AppRouter() {
             </Route>
           </Route>
 
+          {/* 404 route */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </AuthProvider>

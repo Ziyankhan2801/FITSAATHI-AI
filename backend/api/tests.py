@@ -1538,3 +1538,136 @@ class PrivacyConsentPhotoDeletionAPITests(APITestCase):
             ProgressPhoto.objects.filter(pk=photo.pk).exists()
         )
         self.assertTrue(self.storage.exists(image_path))
+
+
+class ProgressPhotoSecureImageAPITests(APITestCase):
+
+    def setUp(self):
+        self.user1 = User.objects.create_user(
+            username='securephoto1',
+            email='securephoto1@example.com',
+            password='TestPass123!',
+        )
+        self.user2 = User.objects.create_user(
+            username='securephoto2',
+            email='securephoto2@example.com',
+            password='TestPass123!',
+        )
+
+        self.storage = ProgressPhoto._meta.get_field('image').storage
+        self.created_file_paths = []
+
+        self.consent = PrivacyConsent.objects.create(
+            user=self.user1,
+            consent_type=PrivacyConsent.ConsentType.PHOTO_STORAGE,
+            is_granted=True,
+            granted_at=timezone.now(),
+        )
+
+        self.photo = self.create_photo(self.user1)
+
+        self.image_url = reverse(
+            'progress-photo-image',
+            args=[self.photo.id],
+        )
+
+    def tearDown(self):
+        from django.db import connections
+
+        for file_path in self.created_file_paths:
+            if self.storage.exists(file_path):
+                self.storage.delete(file_path)
+
+        # Reset Django's connection wrapper so the next test gets a fresh
+        # PostgreSQL connection if a streamed response closed the old one.
+        connections.close_all()
+        super().tearDown()
+
+    def create_photo(self, user):
+        photo = ProgressPhoto.objects.create(
+            user=user,
+            photo_angle='front',
+            image=SimpleUploadedFile(
+                'secure-progress.jpg',
+                b'Private test image content',
+                content_type='image/jpeg',
+            ),
+        )
+
+        self.created_file_paths.append(photo.image.name)
+        return photo
+
+    def test_owner_can_access_own_progress_photo_image(self):
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(self.image_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'image/jpeg')
+
+        image_content = b''.join(response.streaming_content)
+
+        self.assertEqual(
+            image_content,
+            b'Private test image content',
+        )
+
+        response.close()
+
+    def test_another_user_cannot_access_progress_photo_image(self):
+        self.client.force_authenticate(user=self.user2)
+
+        response = self.client.get(self.image_url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_withdrawn_photo_consent_blocks_image_access(self):
+        self.consent.is_granted = False
+        self.consent.withdrawn_at = timezone.now()
+        self.consent.save(
+            update_fields=['is_granted', 'withdrawn_at']
+        )
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(self.image_url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_unauthenticated_user_cannot_access_image(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get(self.image_url)
+
+        self.assertIn(
+            response.status_code,
+            [
+                status.HTTP_401_UNAUTHORIZED,
+                status.HTTP_403_FORBIDDEN,
+            ],
+        )
+
+    def test_image_response_has_private_no_cache_headers(self):
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(self.image_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        cache_control = response.get('Cache-Control', '').lower()
+
+        self.assertIn('private', cache_control)
+        self.assertIn('no-store', cache_control)
+
+        self.assertEqual(
+            response.get('X-Content-Type-Options'),
+            'nosniff',
+        )
+
+        response.close()
