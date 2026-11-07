@@ -32,6 +32,7 @@ export interface FitnessProfile {
   fitness_goal: string
   experience_level: string
   workout_days_per_week: number | null
+  workout_weekdays: number[]
   workout_minutes: number | null
   equipment_level: string
   dietary_preference: string
@@ -67,8 +68,26 @@ async function getErrorMessage(response: Response): Promise<string> {
   return `Request failed: ${response.status}`
 }
 
+async function apiFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(input, init)
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        'Unable to connect to FitSaathi AI. Please check whether the backend is running and try again.',
+      )
+    }
+
+    throw error
+  }
+}
+
+
 async function getCsrfToken(): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/csrf/`, {
+  const response = await apiFetch(`${API_BASE_URL}/csrf/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -88,7 +107,7 @@ async function csrfRequest<T>(
 ): Promise<T> {
   const csrfToken = await getCsrfToken()
 
-  const response = await fetch(`${API_BASE_URL}/${endpoint}/`, {
+  const response = await apiFetch(`${API_BASE_URL}/${endpoint}/`, {
     method,
     credentials: 'include',
     headers: {
@@ -106,7 +125,7 @@ async function csrfRequest<T>(
 }
 
 export async function checkBackendHealth(): Promise<HealthCheckResponse> {
-  const response = await fetch(`${API_BASE_URL}/health/`)
+  const response = await apiFetch(`${API_BASE_URL}/health/`)
 
   if (!response.ok) {
     throw new Error(`Backend request failed: ${response.status}`)
@@ -132,7 +151,7 @@ export async function loginUser(data: {
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
-  const response = await fetch(`${API_BASE_URL}/me/`, {
+  const response = await apiFetch(`${API_BASE_URL}/me/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -152,7 +171,7 @@ export async function logoutUser(): Promise<{
 }
 
 export async function getFitnessProfile(): Promise<FitnessProfile> {
-  const response = await fetch(`${API_BASE_URL}/fitness-profile/`, {
+  const response = await apiFetch(`${API_BASE_URL}/fitness-profile/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -195,7 +214,7 @@ export interface WorkoutSessionData {
 }
 
 export async function getWorkoutSessions(): Promise<WorkoutSession[]> {
-  const response = await fetch(`${API_BASE_URL}/workouts/`, {
+  const response = await apiFetch(`${API_BASE_URL}/workouts/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -219,7 +238,7 @@ export async function updateWorkoutSession(
 ): Promise<WorkoutSession> {
   const csrfToken = await getCsrfToken()
 
-  const response = await fetch(`${API_BASE_URL}/workouts/${id}/`, {
+  const response = await apiFetch(`${API_BASE_URL}/workouts/${id}/`, {
     method: 'PATCH',
     credentials: 'include',
     headers: {
@@ -251,7 +270,7 @@ export interface WorkoutHistory {
 }
 
 export async function getWorkoutHistory(): Promise<WorkoutHistory[]> {
-  const response = await fetch(`${API_BASE_URL}/workout-history/`, {
+  const response = await apiFetch(`${API_BASE_URL}/workout-history/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -291,7 +310,7 @@ export type BodyMeasurementData = Omit<
 >
 
 export async function getBodyMeasurements(): Promise<BodyMeasurement[]> {
-  const response = await fetch(`${API_BASE_URL}/body-measurements/`, {
+  const response = await apiFetch(`${API_BASE_URL}/body-measurements/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -327,7 +346,7 @@ export async function updateBodyMeasurement(
 export async function deleteBodyMeasurement(id: number): Promise<void> {
   const csrfToken = await getCsrfToken()
 
-  const response = await fetch(`${API_BASE_URL}/body-measurements/${id}/`, {
+  const response = await apiFetch(`${API_BASE_URL}/body-measurements/${id}/`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {
@@ -345,7 +364,11 @@ export async function deleteBodyMeasurement(id: number): Promise<void> {
 // LEVEL 6: PRIVACY CONSENT
 // ==========================================
 
-export type ConsentType = 'photo_storage' | 'ai_analysis'
+export type ConsentType =
+  | 'photo_storage'
+  | 'ai_analysis'
+  | 'ai_chat'
+  | 'ai_profile_context'
 
 export interface PrivacyConsent {
   id: number
@@ -358,7 +381,7 @@ export interface PrivacyConsent {
 }
 
 export async function getPrivacyConsents(): Promise<PrivacyConsent[]> {
-  const response = await fetch(`${API_BASE_URL}/privacy-consents/`, {
+  const response = await apiFetch(`${API_BASE_URL}/privacy-consents/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -412,7 +435,7 @@ export interface ProgressPhoto {
 }
 
 export async function getProgressPhotos(): Promise<ProgressPhoto[]> {
-  const response = await fetch(`${API_BASE_URL}/progress-photos/`, {
+  const response = await apiFetch(`${API_BASE_URL}/progress-photos/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -434,7 +457,7 @@ export async function uploadProgressPhoto(
   formData.append('image', image)
   formData.append('photo_angle', photoAngle)
 
-  const response = await fetch(`${API_BASE_URL}/progress-photos/`, {
+  const response = await apiFetch(`${API_BASE_URL}/progress-photos/`, {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -453,7 +476,7 @@ export async function uploadProgressPhoto(
 export async function deleteProgressPhoto(id: number): Promise<void> {
   const csrfToken = await getCsrfToken()
 
-  const response = await fetch(`${API_BASE_URL}/progress-photos/${id}/`, {
+  const response = await apiFetch(`${API_BASE_URL}/progress-photos/${id}/`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {
@@ -562,7 +585,7 @@ export async function getExercises(
   const query = params.toString()
   const endpoint = `${API_BASE_URL}/exercises/${query ? `?${query}` : ''}`
 
-  const response = await fetch(endpoint, {
+  const response = await apiFetch(endpoint, {
     method: 'GET',
     credentials: 'include',
   })
@@ -575,7 +598,7 @@ export async function getExercises(
 }
 
 export async function getExercise(id: number): Promise<Exercise> {
-  const response = await fetch(`${API_BASE_URL}/exercises/${id}/`, {
+  const response = await apiFetch(`${API_BASE_URL}/exercises/${id}/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -628,7 +651,7 @@ export interface WorkoutPlanExerciseData {
 
 // Get all custom workout plans
 export async function getWorkoutPlans(): Promise<WorkoutPlan[]> {
-  const response = await fetch(`${API_BASE_URL}/workout-plans/`, {
+  const response = await apiFetch(`${API_BASE_URL}/workout-plans/`, {
     method: 'GET',
     credentials: 'include',
   })
@@ -655,7 +678,7 @@ export async function createWorkoutPlan(
 export async function getWorkoutPlan(
   id: number,
 ): Promise<WorkoutPlan> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/workout-plans/${id}/`,
     {
       method: 'GET',
@@ -700,7 +723,7 @@ export async function removeExerciseFromPlan(
 ): Promise<void> {
   const csrfToken = await getCsrfToken()
 
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/workout-plan-exercises/${exercisePlanId}/`,
     {
       method: 'DELETE',
@@ -714,4 +737,643 @@ export async function removeExerciseFromPlan(
   if (!response.ok) {
     throw new Error(await getErrorMessage(response))
   }
+}
+
+
+// ==========================================
+// LEVEL 8: PERSONALIZED WORKOUT GENERATOR
+// ==========================================
+
+export interface GeneratedEquipment {
+  id: number
+  name: string
+  category: string
+}
+
+export interface GeneratedWorkoutExercise {
+  exercise: number
+  exercise_name: string
+  description: string
+  category: ExerciseCategory
+  muscle_group: ExerciseMuscleGroup
+  difficulty: ExerciseDifficulty
+  equipment: ExerciseEquipment
+  required_equipment: GeneratedEquipment[]
+  training_style: string
+  instructions: string[]
+  safety_tips: string
+  sets: number
+  reps: string
+  rest_seconds: number
+  order: number
+}
+
+export interface GeneratedWorkoutDay {
+  workout_day: number
+  title: string
+  focus: string
+  planned_exercises: GeneratedWorkoutExercise[]
+}
+
+export interface GeneratedWorkout {
+  generation_type: 'rule_based'
+  message: string
+  profile_summary: {
+    fitness_goal: string
+    experience_level: string
+    workout_days_per_week: number
+    workout_minutes: number
+    equipment_level: string
+    gym_type: string | null
+    training_style: string | null
+    available_equipment: GeneratedEquipment[]
+  }
+  days: GeneratedWorkoutDay[]
+  safety_notice: string
+}
+
+export async function generatePersonalizedWorkout(): Promise<GeneratedWorkout> {
+  return csrfRequest<GeneratedWorkout>('workout-plans/generate', 'POST')
+}
+
+
+
+
+// ==========================================
+// LEVEL 11: AI FITNESS COACH
+// ==========================================
+
+export interface AIMessage {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
+
+export interface AIConversation {
+  id: number
+  title: string
+  messages: AIMessage[]
+  created_at: string
+  updated_at: string
+}
+
+interface AIChatResponse {
+  conversation_id: number
+  user_message: AIMessage
+  assistant_message: AIMessage
+}
+
+export async function getAIConversations(): Promise<AIConversation[]> {
+  const response = await apiFetch(`${API_BASE_URL}/ai/conversations/`, {
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  return (await response.json()) as AIConversation[]
+}
+
+export async function createAIConversation(): Promise<AIConversation> {
+  return csrfRequest<AIConversation>('ai/conversations', 'POST', {})
+}
+
+export async function getAIConversation(
+  id: number,
+): Promise<AIConversation> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/ai/conversations/${id}/`,
+    { credentials: 'include' },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  return (await response.json()) as AIConversation
+}
+
+export async function sendAIMessage(
+  conversationId: number,
+  content: string,
+): Promise<AIChatResponse> {
+  return csrfRequest<AIChatResponse>(
+    `ai/conversations/${conversationId}/messages`,
+    'POST',
+    { content },
+  )
+}
+
+export async function deleteAIConversation(id: number): Promise<void> {
+  const csrfToken = await getCsrfToken()
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/ai/conversations/${id}/`,
+    {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: {
+        'X-CSRFToken': csrfToken,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+}
+
+
+
+
+// ==========================================
+// LEVEL 13: NUTRITION COACH
+// ==========================================
+
+export type FoodCategory =
+  | 'grains'
+  | 'dairy'
+  | 'fruits'
+  | 'vegetables'
+  | 'protein'
+  | 'nuts'
+  | 'legumes'
+  | 'beverages'
+  | 'other'
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
+
+export interface FoodItem {
+  id: number
+  name: string
+  slug: string
+  category: FoodCategory
+  serving_size_g: string | number
+  calories: string | number
+  protein_g: string | number
+  carbohydrates_g: string | number
+  fat_g: string | number
+  fiber_g: string | number
+  is_vegetarian: boolean
+}
+
+export interface FoodFilters {
+  search?: string
+  category?: FoodCategory | ''
+  vegetarian?: boolean
+}
+
+export interface FoodNutrition {
+  calories: number
+  protein_g: number
+  carbohydrates_g: number
+  fat_g: number
+  fiber_g: number
+}
+
+export interface MealEntry {
+  id: number
+  food: number
+  food_name: string
+  food_nutrition: FoodNutrition
+  meal_type: MealType
+  quantity_g: string | number
+  meal_date: string
+  notes: string
+  created_at: string
+}
+
+export interface MealEntryData {
+  food: number
+  meal_type: MealType
+  quantity_g: number
+  meal_date: string
+  notes?: string
+}
+
+export interface NutritionSummary {
+  date: string
+  total_entries: number
+  totals: FoodNutrition
+  meals: MealEntry[]
+}
+
+export async function getFoodItems(
+  filters: FoodFilters = {},
+): Promise<FoodItem[]> {
+  const params = new URLSearchParams()
+
+  if (filters.search?.trim()) {
+    params.set('search', filters.search.trim())
+  }
+
+  if (filters.category) {
+    params.set('category', filters.category)
+  }
+
+  if (filters.vegetarian !== undefined) {
+    params.set('vegetarian', String(filters.vegetarian))
+  }
+
+  const query = params.toString()
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/nutrition/foods/${query ? `?${query}` : ''}`,
+    { credentials: 'include' },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  return (await response.json()) as FoodItem[]
+}
+
+export async function getMealEntries(
+  date?: string,
+): Promise<MealEntry[]> {
+  const params = new URLSearchParams()
+
+  if (date) {
+    params.set('date', date)
+  }
+
+  const query = params.toString()
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/nutrition/meals/${query ? `?${query}` : ''}`,
+    { credentials: 'include' },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  return (await response.json()) as MealEntry[]
+}
+
+export async function createMealEntry(
+  data: MealEntryData,
+): Promise<MealEntry> {
+  return csrfRequest<MealEntry>(
+    'nutrition/meals',
+    'POST',
+    data,
+  )
+}
+
+export async function updateMealEntry(
+  id: number,
+  data: Partial<MealEntryData>,
+): Promise<MealEntry> {
+  return csrfRequest<MealEntry>(
+    `nutrition/meals/${id}`,
+    'PATCH',
+    data,
+  )
+}
+
+export async function deleteMealEntry(id: number): Promise<void> {
+  const csrfToken = await getCsrfToken()
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/nutrition/meals/${id}/`,
+    {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: {
+        'X-CSRFToken': csrfToken,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+}
+
+export async function getNutritionSummary(
+  date?: string,
+): Promise<NutritionSummary> {
+  const params = new URLSearchParams()
+
+  if (date) {
+    params.set('date', date)
+  }
+
+  const query = params.toString()
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/nutrition/summary/${query ? `?${query}` : ''}`,
+    { credentials: 'include' },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  return (await response.json()) as NutritionSummary
+}
+
+
+
+
+// ==========================================
+// LEVEL 13: PERSONALIZED NUTRITION TARGETS
+// ==========================================
+
+export type BiologicalSex = 'male' | 'female'
+
+export type ActivityLevel =
+  | 'sedentary'
+  | 'light'
+  | 'moderate'
+  | 'very'
+  | 'extra'
+
+export interface NutritionSettings {
+  biological_sex: BiologicalSex
+  activity_level: ActivityLevel
+  manual_calorie_target: number | null
+  manual_protein_target_g: number | null
+  updated_at: string
+}
+
+export interface NutritionTargets {
+  configured: true
+  age: number
+  bmr: number
+  tdee: number
+  calories: number
+  protein_g: number
+  carbohydrates_g: number
+  fat_g: number
+  water_ml: number
+  method: string
+  settings: NutritionSettings
+}
+
+export interface NutritionTargetsNotConfigured {
+  configured: false
+  detail: string
+}
+
+export type NutritionTargetsResponse =
+  | NutritionTargets
+  | NutritionTargetsNotConfigured
+
+export type NutritionSettingsData = {
+  biological_sex: BiologicalSex
+  activity_level: ActivityLevel
+  manual_calorie_target?: number | null
+  manual_protein_target_g?: number | null
+}
+
+// GET personalized nutrition targets
+export async function getNutritionTargets(): Promise<NutritionTargetsResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/nutrition/targets/`,
+    { credentials: 'include' },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  return (await response.json()) as NutritionTargetsResponse
+}
+
+// CREATE nutrition settings
+export async function createNutritionSettings(
+  data: NutritionSettingsData,
+): Promise<NutritionSettings> {
+  return csrfRequest<NutritionSettings>(
+    'nutrition/targets',
+    'POST',
+    data,
+  )
+}
+
+// UPDATE nutrition settings
+export async function updateNutritionSettings(
+  data: Partial<NutritionSettingsData>,
+): Promise<NutritionSettings> {
+  return csrfRequest<NutritionSettings>(
+    'nutrition/targets',
+    'PATCH',
+    data,
+  )
+}
+
+
+// ==========================================
+// LEVEL 13: WATER INTAKE TRACKER
+// ==========================================
+
+export interface WaterIntake {
+  id: number
+  intake_date: string
+  amount_ml: number
+  created_at: string
+}
+
+export interface WaterIntakeData {
+  intake_date: string
+  amount_ml: number
+}
+
+export async function getWaterIntake(
+  date?: string,
+): Promise<WaterIntake[]> {
+  const params = new URLSearchParams()
+
+  if (date) {
+    params.set('date', date)
+  }
+
+  const query = params.toString()
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/nutrition/water/${query ? `?${query}` : ''}`,
+    { credentials: 'include' },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  return (await response.json()) as WaterIntake[]
+}
+
+export async function createWaterIntake(
+  data: WaterIntakeData,
+): Promise<WaterIntake> {
+  return csrfRequest<WaterIntake>(
+    'nutrition/water',
+    'POST',
+    data,
+  )
+}
+
+export async function deleteWaterIntake(id: number): Promise<void> {
+  const csrfToken = await getCsrfToken()
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/nutrition/water/${id}/`,
+    {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: {
+        'X-CSRFToken': csrfToken,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+}
+
+
+// ==========================================
+// LEVEL 13: SLEEP TRACKER
+// ==========================================
+
+export type SleepQuality = 'poor' | 'okay' | 'good'
+
+export interface SleepLog {
+  id: number
+  sleep_date: string
+  duration_minutes: number
+  quality: SleepQuality
+  notes: string
+  created_at: string
+}
+
+export interface SleepLogData {
+  sleep_date: string
+  duration_minutes: number
+  quality: SleepQuality
+  notes?: string
+}
+
+export async function getSleepLogs(
+  date?: string,
+): Promise<SleepLog[]> {
+  const params = new URLSearchParams()
+
+  if (date) {
+    params.set('date', date)
+  }
+
+  const query = params.toString()
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/nutrition/sleep/${query ? `?${query}` : ''}`,
+    { credentials: 'include' },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  return (await response.json()) as SleepLog[]
+}
+
+export async function createSleepLog(
+  data: SleepLogData,
+): Promise<SleepLog> {
+  return csrfRequest<SleepLog>(
+    'nutrition/sleep',
+    'POST',
+    data,
+  )
+}
+
+export async function deleteSleepLog(id: number): Promise<void> {
+  const csrfToken = await getCsrfToken()
+
+  const response = await apiFetch(
+    `${API_BASE_URL}/nutrition/sleep/${id}/`,
+    {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: {
+        'X-CSRFToken': csrfToken,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+}
+
+
+
+// ==========================================
+// LEVEL 4: ACCOUNT MANAGEMENT
+// ==========================================
+
+export interface AccountActionResponse {
+  message: string
+}
+
+export async function requestPasswordReset(
+  email: string,
+): Promise<AccountActionResponse> {
+  return csrfRequest<AccountActionResponse>(
+    'password-reset',
+    'POST',
+    { email },
+  )
+}
+
+export async function confirmPasswordReset(data: {
+  uid: string
+  token: string
+  password: string
+  password_confirm: string
+}): Promise<AccountActionResponse> {
+  return csrfRequest<AccountActionResponse>(
+    'password-reset/confirm',
+    'POST',
+    data,
+  )
+}
+
+export async function exportMyData(): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/account/export/`, {
+    method: 'GET',
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  const blob = await response.blob()
+  const downloadUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = downloadUrl
+  link.download = 'fitsaathi-my-data.json'
+
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+
+  URL.revokeObjectURL(downloadUrl)
+}
+
+export async function deleteMyAccount(
+  password: string,
+): Promise<AccountActionResponse> {
+  return csrfRequest<AccountActionResponse>(
+    'account/delete',
+    'POST',
+    { password },
+  )
 }

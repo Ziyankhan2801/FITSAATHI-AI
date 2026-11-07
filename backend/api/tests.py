@@ -18,7 +18,7 @@ from api.models import (
 )
 
 from rest_framework import status
-from rest_framework.test import APITestCase, APIClient
+from rest_framework.test import APITestCase, APIClient, APITransactionTestCase
 
 
 User = get_user_model()
@@ -1540,7 +1540,7 @@ class PrivacyConsentPhotoDeletionAPITests(APITestCase):
         self.assertTrue(self.storage.exists(image_path))
 
 
-class ProgressPhotoSecureImageAPITests(APITestCase):
+class ProgressPhotoSecureImageAPITests(APITransactionTestCase):
 
     def setUp(self):
         self.user1 = User.objects.create_user(
@@ -1572,15 +1572,10 @@ class ProgressPhotoSecureImageAPITests(APITestCase):
         )
 
     def tearDown(self):
-        from django.db import connections
-
         for file_path in self.created_file_paths:
             if self.storage.exists(file_path):
                 self.storage.delete(file_path)
 
-        # Reset Django's connection wrapper so the next test gets a fresh
-        # PostgreSQL connection if a streamed response closed the old one.
-        connections.close_all()
         super().tearDown()
 
     def create_photo(self, user):
@@ -1669,5 +1664,4 @@ class ProgressPhotoSecureImageAPITests(APITestCase):
             response.get('X-Content-Type-Options'),
             'nosniff',
         )
-
         response.close()

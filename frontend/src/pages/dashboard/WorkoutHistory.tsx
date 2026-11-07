@@ -1,35 +1,61 @@
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
   Clock3,
   Dumbbell,
-  LoaderCircle,
   Target,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   getWorkoutHistory,
   type WorkoutHistory as WorkoutHistoryRecord,
 } from '../../services/api'
+import LoadingState from '../../components/common/LoadingState'
+import ErrorState from '../../components/common/ErrorState'
+import EmptyState from '../../components/common/EmptyState'
 
 export default function WorkoutHistory() {
+  const navigate = useNavigate()
+
   const [sessions, setSessions] = useState<WorkoutHistoryRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const loadHistory = useCallback(async () => {
+    setLoading(true)
+    setError('')
+
+    try {
+      const data = await getWorkoutHistory()
+      setSessions(data)
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not load workout history.',
+      )
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     let active = true
 
-    getWorkoutHistory()
-      .then((data) => {
+    async function fetchHistory() {
+      setLoading(true)
+      setError('')
+
+      try {
+        const data = await getWorkoutHistory()
+
         if (active) {
           setSessions(data)
         }
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (active) {
           setError(
             err instanceof Error
@@ -37,10 +63,14 @@ export default function WorkoutHistory() {
               : 'Could not load workout history.',
           )
         }
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void fetchHistory()
 
     return () => {
       active = false
@@ -120,20 +150,17 @@ export default function WorkoutHistory() {
       </header>
 
       {loading ? (
-        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#171a15] p-6 text-sm text-white/60">
-          <LoaderCircle size={20} className="animate-spin" />
-          Loading your workout history...
-        </div>
+        <LoadingState
+          title="Loading workout history"
+          description="Fetching your completed workout sessions..."
+        />
       ) : error ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-300"
-        >
-          {error}
-          <p className="mt-2 text-xs text-red-200/80">
-            Check that you are logged in and the backend server is running.
-          </p>
-        </div>
+        <ErrorState
+          title="Unable to load workout history"
+          message={`${error} Check that you are logged in and the backend server is running.`}
+          onRetry={loadHistory}
+          retryLabel="Try again"
+        />
       ) : (
         <>
           <section className="grid gap-4 sm:grid-cols-3">
@@ -176,22 +203,12 @@ export default function WorkoutHistory() {
             </div>
 
             {sessions.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/15 bg-[#171a15] p-8 text-center">
-                <Dumbbell size={30} className="mx-auto text-white/35" />
-                <h4 className="mt-4 font-semibold">
-                  No completed workouts yet
-                </h4>
-                <p className="mt-2 text-sm text-white/50">
-                  Complete all exercises in a workout to create a history
-                  record.
-                </p>
-                <Link
-                  to="/dashboard/workouts"
-                  className="mt-5 inline-flex rounded-full bg-[#c5f66a] px-5 py-2.5 text-sm font-semibold text-[#10120f] transition hover:bg-[#d4ff85]"
-                >
-                  Go to my workouts
-                </Link>
-              </div>
+              <EmptyState
+                title="No completed workouts yet"
+                description="Complete all exercises in a workout to create a history record."
+                actionLabel="Go to my workouts"
+                onAction={() => navigate('/dashboard/workouts')}
+              />
             ) : (
               <div className="space-y-4">
                 {sessions.map((session) => (
@@ -204,14 +221,14 @@ export default function WorkoutHistory() {
                         <p className="text-xs font-semibold uppercase tracking-wider text-[#c5f66a]">
                           Day {session.workout_day}
                         </p>
+
                         <h4 className="mt-2 text-lg font-semibold">
                           {session.workout_title}
                         </h4>
 
                         <p className="mt-2 flex items-center gap-2 text-xs text-white/45">
                           <CalendarDays size={14} />
-                          Workout date:{' '}
-                          {formatWorkoutDate(session.workout_date)}
+                          Workout date: {formatWorkoutDate(session.workout_date)}
                         </p>
 
                         <p className="mt-2 flex items-center gap-2 text-xs text-white/45">
@@ -252,6 +269,7 @@ export default function WorkoutHistory() {
                         <p className="text-sm font-medium text-white/70">
                           Completed exercises
                         </p>
+
                         <div className="mt-3 flex flex-wrap gap-2">
                           {session.completed_exercises.map((exercise) => (
                             <span

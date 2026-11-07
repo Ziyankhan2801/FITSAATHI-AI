@@ -1,92 +1,126 @@
 
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
-import App from '../App'
-import DashboardHome from '../pages/dashboard/DashboardHome'
-import FitnessAssessment from '../pages/dashboard/FitnessAssessment'
-import MyWorkouts from '../pages/dashboard/MyWorkouts'
-import WorkoutHistory from '../pages/dashboard/WorkoutHistory'
-import Progress from '../pages/dashboard/Progress'
-import ExerciseLibrary from '../pages/dashboard/ExerciseLibrary'
-import PlaceholderPage from '../pages/dashboard/PlaceholderPage'
-import NotFound from '../pages/NotFound'
-
 import DashboardLayout from '../layouts/DashboardLayout'
-import Login from '../pages/auth/Login'
-import Register from '../pages/auth/Register'
-
 import ProtectedRoute from './ProtectedRoute'
 import { AuthProvider } from '../context/AuthContext'
+
+// Lazy-loaded pages
+const App = lazy(() => import('../App'))
+
+const Login = lazy(() => import('../pages/auth/Login'))
+const Register = lazy(() => import('../pages/auth/Register'))
+const ForgotPassword = lazy(
+  () => import('../pages/auth/ForgotPassword'),
+)
+const ResetPassword = lazy(
+  () => import('../pages/auth/ResetPassword'),
+)
+const NotFound = lazy(() => import('../pages/NotFound'))
+
+const DashboardHome = lazy(
+  () => import('../pages/dashboard/DashboardHome'),
+)
+const FitnessAssessment = lazy(
+  () => import('../pages/dashboard/FitnessAssessment'),
+)
+const MyWorkouts = lazy(
+  () => import('../pages/dashboard/MyWorkouts'),
+)
+const WorkoutStudio = lazy(
+  () => import('../pages/dashboard/WorkoutStudio'),
+)
+const WorkoutHistory = lazy(
+  () => import('../pages/dashboard/WorkoutHistory'),
+)
+const Progress = lazy(
+  () => import('../pages/dashboard/Progress'),
+)
+const ExerciseLibrary = lazy(
+  () => import('../pages/dashboard/ExerciseLibrary'),
+)
+const Schedule = lazy(
+  () => import('../pages/dashboard/Schedule'),
+)
+const CameraCoach = lazy(
+  () => import('../pages/dashboard/CameraCoach'),
+)
+const AICoach = lazy(
+  () => import('../pages/dashboard/AICoach'),
+)
+const Nutrition = lazy(
+  () => import('../pages/dashboard/Nutrition'),
+)
+const Settings = lazy(
+  () => import('../pages/dashboard/Settings'),
+)
+
+// Route loading fallback
+function PageLoader() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
+        <p className="text-sm text-gray-500">
+          Loading FitSaathi AI...
+        </p>
+      </div>
+    </div>
+  )
+}
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<App />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+{/* Public Routes */}
+<Route path="/" element={<App />} />
+<Route path="/login" element={<Login />} />
+<Route path="/register" element={<Register />} />
+<Route path="/forgot-password" element={<ForgotPassword />} />
+<Route path="/reset-password" element={<ResetPassword />} />
 
-          {/* Protected dashboard routes */}
-          <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<DashboardLayout />}>
-              <Route index element={<DashboardHome />} />
+            {/* Protected Dashboard Routes */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/dashboard" element={<DashboardLayout />}>
+                <Route index element={<DashboardHome />} />
 
-              <Route path="workouts" element={<MyWorkouts />} />
+                <Route path="workouts" element={<MyWorkouts />} />
+                <Route
+                  path="workout-studio"
+                  element={<WorkoutStudio />}
+                />
+                <Route
+                  path="exercise-library"
+                  element={<ExerciseLibrary />}
+                />
+                <Route
+                  path="workout-history"
+                  element={<WorkoutHistory />}
+                />
+                <Route path="progress" element={<Progress />} />
+                <Route path="schedule" element={<Schedule />} />
 
-              <Route
-                path="exercise-library"
-                element={<ExerciseLibrary />}
-              />
+                <Route path="ai-coach" element={<AICoach />} />
+                <Route path="camera-coach" element={<CameraCoach />} />
 
-              <Route
-                path="workout-history"
-                element={<WorkoutHistory />}
-              />
+                <Route path="nutrition" element={<Nutrition />} />
 
-              <Route path="progress" element={<Progress />} />
-
-              <Route
-                path="nutrition"
-                element={
-                  <PlaceholderPage
-                    title="Nutrition Coach"
-                    description="Your personalised nutrition guidance and Indian-food-friendly meal planning will be developed here."
-                  />
-                }
-              />
-
-              <Route
-                path="schedule"
-                element={
-                  <PlaceholderPage
-                    title="My Schedule"
-                    description="Plan your workout days and build a routine that fits your lifestyle."
-                  />
-                }
-              />
-
-              <Route
-                path="settings"
-                element={
-                  <PlaceholderPage
-                    title="Settings"
-                    description="Account preferences, privacy controls and personal fitness settings will be added here."
-                  />
-                }
-              />
-
-              <Route
-                path="assessment"
-                element={<FitnessAssessment />}
-              />
+                <Route path="settings" element={<Settings />} />
+                <Route
+                  path="assessment"
+                  element={<FitnessAssessment />}
+                />
+              </Route>
             </Route>
-          </Route>
 
-          {/* 404 route */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* 404 Route */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   )

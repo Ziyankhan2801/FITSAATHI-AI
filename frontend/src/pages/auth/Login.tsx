@@ -8,7 +8,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../../context/useAuth'
 import { loginUser } from '../../services/api'
 
 export default function Login() {
@@ -50,12 +50,18 @@ export default function Login() {
         : '/dashboard'
 
       navigate(redirectPath, { replace: true })
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to log in. Please try again.',
-      )
+        } catch (err) {
+      if (err instanceof TypeError) {
+        setError(
+          'Unable to connect to FitSaathi AI. Please check whether the backend is running and try again.',
+        )
+      } else {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Unable to log in. Please try again.',
+        )
+      }
     } finally {
       setLoading(false)
     }
@@ -173,6 +179,15 @@ export default function Login() {
                     <Eye size={18} />
                   )}
                 </button>
+                            </div>
+
+              <div className="mt-2 text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm font-medium text-[#c5f66a] hover:underline"
+                >
+                  Forgot password?
+                </Link>
               </div>
             </div>
 

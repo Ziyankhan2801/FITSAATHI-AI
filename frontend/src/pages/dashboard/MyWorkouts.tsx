@@ -1,3 +1,7 @@
+import LoadingState from '../../components/common/LoadingState'
+import ErrorState from '../../components/common/ErrorState'
+import EmptyState from '../../components/common/EmptyState'
+
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
@@ -19,6 +23,7 @@ import {
   createWorkoutSession,
   getExercises,
   getFitnessProfile,
+  generatePersonalizedWorkout,
   getWorkoutPlans,
   getWorkoutSessions,
   removeExerciseFromPlan,
@@ -26,6 +31,8 @@ import {
   updateWorkoutSession,
   type Exercise as LibraryExercise,
   type FitnessProfile,
+  type GeneratedWorkout,
+  type GeneratedWorkoutDay,
   type WorkoutPlan,
   type WorkoutSession,
 } from '../../services/api'
@@ -212,8 +219,15 @@ function formatGoal(goal: string): string {
   return labels[goal] ?? 'General fitness'
 }
 
-function getLocalDate(): string {
-  const now = new Date()
+/**
+ * Date creation stays outside the React component render.
+ * The event handlers call this helper when the user changes workout progress.
+ */
+function getCurrentDate(): Date {
+  return new Date()
+}
+
+function getLocalDate(now: Date): string {
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
@@ -228,6 +242,10 @@ export default function MyWorkouts() {
   const [error, setError] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [generatedWorkout, setGeneratedWorkout] = useState<GeneratedWorkout | null>(null)
+  const [generatingWorkout, setGeneratingWorkout] = useState(false)
+  const [generatorError, setGeneratorError] = useState('')
+  const [savingGeneratedDay, setSavingGeneratedDay] = useState<number | null>(null)
   const [selectedDay, setSelectedDay] = useState('day-1')
   const [completedByDay, setCompletedByDay] = useState<Record<string, string[]>>({})
   const [sessionsByDay, setSessionsByDay] = useState<Record<number, WorkoutSession>>({})
@@ -443,7 +461,73 @@ export default function MyWorkouts() {
     }
   }
 
-  async function saveWorkoutProgress(day: WorkoutDay, completedIds: string[]) {
+  async function handleGenerateWorkout() {
+    setGeneratingWorkout(true)
+    setGeneratorError('')
+    setGeneratedWorkout(null)
+
+    try {
+      const preview = await generatePersonalizedWorkout()
+      setGeneratedWorkout(preview)
+    } catch (err: unknown) {
+      setGeneratorError(
+        err instanceof Error ? err.message : 'Could not generate a personalized workout.',
+      )
+    } finally {
+      setGeneratingWorkout(false)
+    }
+  }
+
+  async function handleSaveGeneratedDay(day: GeneratedWorkoutDay) {
+    const existingPlan = workoutPlans.find(
+      (plan) => plan.workout_day === day.workout_day,
+    )
+
+    if (existingPlan) {
+      setGeneratorError(
+        `Day ${day.workout_day} already has a saved plan. It was not changed. Edit or remove that plan before saving this generated version.`,
+      )
+      return
+    }
+
+    setSavingGeneratedDay(day.workout_day)
+    setGeneratorError('')
+
+    try {
+      const savedPlan = await createWorkoutPlan({
+        workout_day: day.workout_day,
+        title: day.title,
+        focus: day.focus,
+      })
+
+      for (const exercise of day.planned_exercises) {
+        await addExerciseToPlan(savedPlan.id, {
+          exercise: exercise.exercise,
+          sets: exercise.sets,
+          reps: exercise.reps,
+          rest_seconds: exercise.rest_seconds,
+          order: exercise.order,
+        })
+      }
+
+      await refreshWorkoutPlans()
+    } catch (err: unknown) {
+      await refreshWorkoutPlans()
+      setGeneratorError(
+        err instanceof Error
+          ? `${err.message} The plan may have been partially saved; check your weekly plan before retrying.`
+          : 'Could not save this generated day. Check your weekly plan before retrying.',
+      )
+    } finally {
+      setSavingGeneratedDay(null)
+    }
+  }
+
+  async function saveWorkoutProgress(
+    day: WorkoutDay,
+    completedIds: string[],
+    now: Date,
+  ) {
     const workoutDayNumber = Number(day.id.replace('day-', ''))
     const totalExercises = day.exercises.length
     const percentage = totalExercises
@@ -451,7 +535,7 @@ export default function MyWorkouts() {
       : 0
     const completedToday = percentage === 100 && totalExercises > 0
     const existingSession = sessionsByDay[workoutDayNumber]
-    const today = getLocalDate()
+    const today = getLocalDate(now)
     const isAlreadyCompletedToday =
       existingSession?.completion_percentage === 100 &&
       existingSession.workout_date === today
@@ -465,7 +549,7 @@ export default function MyWorkouts() {
       completed_at: completedToday
         ? isAlreadyCompletedToday
           ? existingSession.completed_at
-          : new Date().toISOString()
+          : now.toISOString()
         : null,
       workout_date: completedToday
         ? isAlreadyCompletedToday
@@ -504,12 +588,12 @@ export default function MyWorkouts() {
       : [...currentIds, id]
 
     setCompletedByDay((current) => ({ ...current, [selectedDay]: nextIds }))
-    await saveWorkoutProgress(activeWorkout, nextIds)
+    await saveWorkoutProgress(activeWorkout, nextIds, getCurrentDate())
   }
 
   async function resetWorkout() {
     setCompletedByDay((current) => ({ ...current, [selectedDay]: [] }))
-    await saveWorkoutProgress(activeWorkout, [])
+    await saveWorkoutProgress(activeWorkout, [], getCurrentDate())
   }
 
   return (
@@ -539,17 +623,17 @@ export default function MyWorkouts() {
       </header>
 
       {loading ? (
-        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#171a15] p-6 text-sm text-white/60">
-          <LoaderCircle size={20} className="animate-spin" />
-          Loading your fitness profile and saved workouts...
-        </div>
+        <LoadingState
+          title="Loading your workouts"
+          description="Fetching your fitness profile and saved workout plans..."
+        />
       ) : error ? (
-        <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-300">
-          {error}
-          <p className="mt-2 text-xs text-red-200/80">
-            Check that you are logged in and the backend server is running. Refresh the page after resolving the issue.
-          </p>
-        </div>
+        <ErrorState
+          title="Unable to load your workouts"
+          message={`${error} Check that you are logged in and the backend server is running.`}
+          onRetry={() => window.location.reload()}
+          retryLabel="Reload workouts"
+        />
       ) : (
         <>
           {profile && (
@@ -574,6 +658,117 @@ export default function MyWorkouts() {
               </div>
             </section>
           )}
+
+          <section className="rounded-2xl border border-[#c5f66a]/20 bg-[#171a15] p-5 sm:p-6">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#c5f66a]">
+                  Personalized workout engine
+                </p>
+                <h3 className="mt-2 text-xl font-semibold">Generate your workout plan</h3>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+                  Uses your saved fitness goal, experience, workout schedule, gym type,
+                  training style and available equipment to create a reviewable plan.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleGenerateWorkout()}
+                disabled={generatingWorkout || savingGeneratedDay !== null}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-[#c5f66a] px-5 py-3 text-sm font-semibold text-[#10120f] transition hover:bg-[#d5ff83] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {generatingWorkout ? (
+                  <LoaderCircle size={16} className="animate-spin" />
+                ) : (
+                  <Target size={16} />
+                )}
+                {generatingWorkout ? 'Generating...' : 'Generate workout'}
+              </button>
+            </div>
+
+            {generatorError && (
+              <p role="alert" className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-300">
+                {generatorError}
+              </p>
+            )}
+
+            {generatedWorkout && (
+              <div className="mt-6 space-y-4">
+                <div className="rounded-xl bg-[#10120f] p-4">
+                  <p className="text-sm font-medium text-[#c5f66a]">
+                    {generatedWorkout.message}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-white/45">
+                    {formatGoal(generatedWorkout.profile_summary.fitness_goal)} ·{' '}
+                    {generatedWorkout.profile_summary.experience_level} ·{' '}
+                    {generatedWorkout.profile_summary.workout_minutes} minutes ·{' '}
+                    {generatedWorkout.profile_summary.gym_type ?? 'Gym type not set'} ·{' '}
+                    {generatedWorkout.profile_summary.training_style ?? 'General training'}
+                  </p>
+                </div>
+
+                {generatedWorkout.days.map((day) => {
+                  const alreadySaved = workoutPlans.some(
+                    (plan) => plan.workout_day === day.workout_day,
+                  )
+
+                  return (
+                    <article key={day.workout_day} className="rounded-xl border border-white/10 bg-[#10120f]/70 p-4">
+                      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                        <div>
+                          <h4 className="font-semibold">{day.title}</h4>
+                          <p className="mt-1 text-sm text-white/45">
+                            {day.focus} · {day.planned_exercises.length} exercises
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveGeneratedDay(day)}
+                          disabled={alreadySaved || savingGeneratedDay !== null}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-[#c5f66a]/30 px-4 py-2 text-xs font-semibold text-[#c5f66a] transition hover:bg-[#c5f66a]/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {savingGeneratedDay === day.workout_day && (
+                            <LoaderCircle size={14} className="animate-spin" />
+                          )}
+                          {alreadySaved ? 'Existing plan kept' : 'Save this day'}
+                        </button>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {day.planned_exercises.map((exercise, index) => (
+                          <div key={`${day.workout_day}-${exercise.exercise}`} className="rounded-lg bg-white/[0.03] p-3">
+                            <p className="text-sm font-medium">
+                              {index + 1}. {exercise.exercise_name}
+                            </p>
+                            {exercise.description && (
+                              <p className="mt-1 text-xs leading-5 text-white/45">
+                                {exercise.description}
+                              </p>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-white/65">
+                              <span className="rounded-md bg-white/5 px-2 py-1">{exercise.sets} sets</span>
+                              <span className="rounded-md bg-white/5 px-2 py-1">{exercise.reps}</span>
+                              <span className="rounded-md bg-white/5 px-2 py-1">{exercise.rest_seconds}s rest</span>
+                              <span className="rounded-md bg-white/5 px-2 py-1">{exercise.muscle_group.replace('_', ' ')}</span>
+                            </div>
+                            {exercise.safety_tips && (
+                              <p className="mt-2 text-xs text-amber-200/70">
+                                Safety: {exercise.safety_tips}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  )
+                })}
+
+                <p className="text-xs leading-5 text-white/40">
+                  {generatedWorkout.safety_notice} This is a rule-based preview, not an AI medical assessment.
+                </p>
+              </div>
+            )}
+          </section>
 
           <section className="space-y-4">
             <div>
@@ -769,11 +964,12 @@ export default function MyWorkouts() {
 
             <div className="mt-6 space-y-4">
               {activeWorkout.exercises.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/15 p-6 text-center">
-                  <Dumbbell size={24} className="mx-auto text-white/35" />
-                  <p className="mt-3 font-medium">No exercises in this custom plan yet</p>
-                  <p className="mt-1 text-sm text-white/45">Choose exercises from the library above to build this day.</p>
-                </div>
+                <EmptyState
+                  title="No exercises in this workout"
+                  description="Choose exercises from your Exercise Library above to build this day."
+                  actionLabel={activePlan ? undefined : 'Create custom plan'}
+                  onAction={activePlan ? undefined : openPlanEditor}
+                />
               ) : (
                 activeWorkout.exercises.map((exercise, index) => {
                   const done = completedExercises.includes(exercise.id)

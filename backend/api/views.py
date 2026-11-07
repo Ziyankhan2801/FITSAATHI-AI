@@ -1,3 +1,16 @@
+
+from .models import AIConversation, AIMessage
+from .serializers import AIConversationSerializer
+from .services.gemini_service import (
+    generate_coach_response,
+    GeminiServiceError,
+)
+
+from rest_framework.throttling import ScopedRateThrottle
+
+from rest_framework.views import APIView
+from .services.workout_generator import generate_personalized_workout
+
 from rest_framework import generics, filters
 from rest_framework.permissions import IsAuthenticated
 
@@ -14,7 +27,12 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from rest_framework import generics, permissions, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    throttle_classes,
+    throttle_scope,
+)
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -28,6 +46,8 @@ from .models import (
     WorkoutSession,
     WorkoutPlan,
     WorkoutPlanExercise,
+    FoodItem,
+    MealEntry,
 )
 
 from .serializers import (
@@ -40,7 +60,11 @@ from .serializers import (
     WorkoutSessionSerializer,
     WorkoutPlanSerializer,
     WorkoutPlanExerciseSerializer,
+    FoodItemSerializer,
+    MealEntrySerializer,
 )
+
+from django.utils.dateparse import parse_date
 
 
 User = get_user_model()
@@ -63,6 +87,8 @@ def csrf_token_view(request):
 
 
 class RegistrationView(generics.CreateAPIView):
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'register'
     queryset = User.objects.all()
     serializer_class = RegistrationSerializer
     permission_classes = [AllowAny]
@@ -89,6 +115,8 @@ class RegistrationView(generics.CreateAPIView):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
+@throttle_scope('login')
 def login_view(request):
     username = request.data.get('username', '').strip()
     password = request.data.get('password', '')
@@ -477,3 +505,350 @@ class WorkoutPlanExerciseDetailView(generics.DestroyAPIView):
         return WorkoutPlanExercise.objects.filter(
             workout_plan__user=self.request.user
         )
+
+
+class GenerateWorkoutView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'generate_workout'
+
+    def post(self, request):
+        profile, _ = FitnessProfile.objects.get_or_create(
+            user=request.user
+        )
+
+        generated_plan = generate_personalized_workout(profile)
+
+        return Response(generated_plan, status=status.HTTP_200_OK)
+
+
+
+class AIConversationListCreateView(generics.ListCreateAPIView):
+    serializer_class = AIConversationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return AIConversation.objects.filter(
+            user=self.request.user
+        ).prefetch_related('messages')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class AIConversationDetailView(generics.RetrieveDestroyAPIView):
+    serializer_class = AIConversationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return AIConversation.objects.filter(
+            user=self.request.user
+        ).prefetch_related('messages')
+
+def build_ai_fitness_context(profile):
+    """Return only non-sensitive fitness preferences for AI personalization."""
+
+    fields = [
+        ('Fitness goal', 'fitness_goal'),
+        ('Experience level', 'experience_level'),
+        ('Workout location/type', 'gym_type'),
+        ('Training style', 'training_style'),
+        ('Workout days per week', 'workout_days_per_week'),
+        ('Workout duration in minutes', 'workout_minutes'),
+        ('Equipment preference', 'equipment_level'),
+        ('Dietary preference', 'dietary_preference'),
+    ]
+
+    context_lines = []
+
+    for label, field_name in fields:
+        value = getattr(profile, field_name, None)
+
+        if value not in (None, ''):
+            display_method = getattr(
+                profile,
+                f'get_{field_name}_display',
+                None,
+            )
+
+            if callable(display_method):
+                value = display_method()
+
+            context_lines.append(f'{label}: {value}')
+
+    equipment = list(
+        profile.available_equipment.values_list('name', flat=True)
+    )
+
+    if equipment:
+        context_lines.append(
+            'Available equipment: ' + ', '.join(equipment)
+        )
+
+    return '\n'.join(context_lines)
+
+class AIChatMessageView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'ai_chat'
+
+    def post(self, request, conversation_id):
+        # Require separate AI chat consent.
+        has_consent = PrivacyConsent.objects.filter(
+            user=request.user,
+            consent_type=PrivacyConsent.ConsentType.AI_CHAT,
+            is_granted=True,
+        ).exists()
+
+        if not has_consent:
+            return Response(
+                {
+                    'detail': (
+                        'Please grant AI Chat consent before '
+                        'using the AI Fitness Coach.'
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Only allow access to this user's conversation.
+        conversation = get_object_or_404(
+            AIConversation,
+            pk=conversation_id,
+            user=request.user,
+        )
+
+        message = request.data.get('content', '')
+
+        if not isinstance(message, str) or not message.strip():
+            return Response(
+                {'detail': 'Please enter a message.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        message = message.strip()
+
+        if len(message) > 4000:
+            return Response(
+                {'detail': 'Message cannot exceed 4000 characters.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Chat history is always sent after AI_CHAT consent.
+        # Selected profile preferences are added only after separate consent.
+        # Medical notes, measurements, photos, and health limitations are excluded.
+        history = list(
+            conversation.messages.order_by(
+                'created_at'
+            ).values('role', 'content')
+        )[-10:]
+
+        history.append({
+            'role': 'user',
+            'content': message,
+        })
+
+        try:
+            fitness_context = ''
+
+            has_profile_consent = PrivacyConsent.objects.filter(
+                user=request.user,
+                consent_type='ai_profile_context',
+                is_granted=True,
+            ).exists()
+
+            if has_profile_consent:
+                profile, _ = FitnessProfile.objects.get_or_create(
+                    user=request.user
+                )
+                fitness_context = build_ai_fitness_context(profile)
+
+            reply = generate_coach_response(
+                history,
+                fitness_context=fitness_context,
+            )
+
+        except GeminiServiceError:
+            return Response(
+                {
+                    'detail': (
+                        'The AI Coach is temporarily unavailable. '
+                        'Please try again shortly.'
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Save both messages only after Gemini responds successfully.
+        with transaction.atomic():
+            user_message = AIMessage.objects.create(
+                conversation=conversation,
+                role=AIMessage.Role.USER,
+                content=message,
+            )
+
+            assistant_message = AIMessage.objects.create(
+                conversation=conversation,
+                role=AIMessage.Role.ASSISTANT,
+                content=reply,
+            )
+
+            if conversation.title == 'New conversation':
+                conversation.title = message[:50]
+                conversation.save(update_fields=['title', 'updated_at'])
+            else:
+                conversation.save(update_fields=['updated_at'])
+
+        return Response(
+            {
+                'conversation_id': conversation.id,
+                'user_message': {
+                    'id': user_message.id,
+                    'role': user_message.role,
+                    'content': user_message.content,
+                    'created_at': user_message.created_at,
+                },
+                'assistant_message': {
+                    'id': assistant_message.id,
+                    'role': assistant_message.role,
+                    'content': assistant_message.content,
+                    'created_at': assistant_message.created_at,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+
+
+# ==========================================
+# NUTRITION COACH API
+# ==========================================
+
+class FoodItemListView(generics.ListAPIView):
+    serializer_class = FoodItemSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+
+    search_fields = ['name']
+    ordering_fields = ['name', 'calories', 'protein_g']
+    ordering = ['name']
+
+    def get_queryset(self):
+        queryset = FoodItem.objects.filter(is_active=True)
+
+        category = self.request.query_params.get('category')
+        vegetarian = self.request.query_params.get('vegetarian')
+
+        if category:
+            queryset = queryset.filter(category=category)
+
+        if vegetarian == 'true':
+            queryset = queryset.filter(is_vegetarian=True)
+        elif vegetarian == 'false':
+            queryset = queryset.filter(is_vegetarian=False)
+
+        return queryset
+
+
+class MealEntryListCreateView(generics.ListCreateAPIView):
+    serializer_class = MealEntrySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = MealEntry.objects.filter(
+            user=self.request.user
+        ).select_related('food')
+
+        meal_date = self.request.query_params.get('date')
+        meal_type = self.request.query_params.get('meal_type')
+
+        if meal_date:
+            parsed_date = parse_date(meal_date)
+
+            if parsed_date is None:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({
+                    'date': 'Use YYYY-MM-DD date format.'
+                })
+
+            queryset = queryset.filter(meal_date=parsed_date)
+
+        if meal_type:
+            queryset = queryset.filter(meal_type=meal_type)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class MealEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = MealEntrySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return MealEntry.objects.filter(
+            user=self.request.user
+        ).select_related('food')
+
+
+class NutritionSummaryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        date_value = request.query_params.get('date')
+
+        if date_value:
+            meal_date = parse_date(date_value)
+
+            if meal_date is None:
+                return Response(
+                    {'detail': 'Use YYYY-MM-DD date format.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            meal_date = timezone.localdate()
+
+        if meal_date > timezone.localdate():
+            return Response(
+                {'detail': 'Future dates are not allowed.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        entries = MealEntry.objects.filter(
+            user=request.user,
+            meal_date=meal_date,
+        ).select_related('food')
+
+        serialized_entries = MealEntrySerializer(
+            entries,
+            many=True,
+            context={'request': request},
+        ).data
+
+        totals = {
+            'calories': 0,
+            'protein_g': 0,
+            'carbohydrates_g': 0,
+            'fat_g': 0,
+            'fiber_g': 0,
+        }
+
+        for entry in serialized_entries:
+            nutrition = entry['food_nutrition']
+
+            for nutrient in totals:
+                totals[nutrient] += nutrition[nutrient]
+
+        totals = {
+            nutrient: round(value, 2)
+            for nutrient, value in totals.items()
+        }
+
+        return Response({
+            'date': meal_date,
+            'total_entries': len(serialized_entries),
+            'totals': totals,
+            'meals': serialized_entries,
+        })

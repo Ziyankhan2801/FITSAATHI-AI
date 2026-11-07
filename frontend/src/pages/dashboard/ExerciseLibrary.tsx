@@ -17,6 +17,11 @@ import {
   X,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+
+import LoadingState from '../../components/common/LoadingState'
+import ErrorState from '../../components/common/ErrorState'
+import EmptyState from '../../components/common/EmptyState'
+
 import {
   getExercises,
   getExercise,
@@ -114,7 +119,9 @@ function ExerciseCard({
           {formatLabel(exercise.category)}
         </span>
 
-        <span className={`absolute bottom-3 right-3 rounded-full border px-3 py-1 text-[10px] font-semibold ${getDifficultyStyle(exercise.difficulty)}`}>
+        <span
+          className={`absolute bottom-3 right-3 rounded-full border px-3 py-1 text-[10px] font-semibold ${getDifficultyStyle(exercise.difficulty)}`}
+        >
           {formatLabel(exercise.difficulty)}
         </span>
       </div>
@@ -229,10 +236,14 @@ function ExerciseDetailModal({
             <span className="rounded-full bg-[#c5f66a]/10 px-3 py-1 text-xs text-[#c5f66a]">
               {formatLabel(exercise.category)}
             </span>
+
             <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/60">
               {formatLabel(exercise.muscle_group)}
             </span>
-            <span className={`rounded-full border px-3 py-1 text-xs ${getDifficultyStyle(exercise.difficulty)}`}>
+
+            <span
+              className={`rounded-full border px-3 py-1 text-xs ${getDifficultyStyle(exercise.difficulty)}`}
+            >
               {formatLabel(exercise.difficulty)}
             </span>
           </div>
@@ -282,6 +293,7 @@ function ExerciseDetailModal({
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#c5f66a]/10 text-xs font-bold text-[#c5f66a]">
                       {index + 1}
                     </span>
+
                     <p className="pt-1 text-sm leading-6 text-white/65">
                       {instruction}
                     </p>
@@ -301,6 +313,7 @@ function ExerciseDetailModal({
                 <ShieldCheck size={17} />
                 Safety tips
               </h3>
+
               <p className="mt-2 text-sm leading-6 text-white/60">
                 {exercise.safety_tips}
               </p>
@@ -328,11 +341,14 @@ export default function ExerciseLibrary() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [retryKey, setRetryKey] = useState(0)
+
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<ExerciseCategory | ''>('')
   const [muscleGroup, setMuscleGroup] = useState<ExerciseMuscleGroup | ''>('')
   const [difficulty, setDifficulty] = useState<ExerciseDifficulty | ''>('')
   const [equipment, setEquipment] = useState<ExerciseEquipment | ''>('')
+
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
@@ -349,6 +365,7 @@ export default function ExerciseLibrary() {
     [search, category, muscleGroup, difficulty, equipment],
   )
 
+  // Load exercises whenever filters change or retry is clicked.
   useEffect(() => {
     let active = true
 
@@ -358,7 +375,10 @@ export default function ExerciseLibrary() {
 
       try {
         const data = await getExercises(filters)
-        if (active) setExercises(data)
+
+        if (active) {
+          setExercises(data)
+        }
       } catch (err: unknown) {
         if (active) {
           setError(
@@ -368,7 +388,9 @@ export default function ExerciseLibrary() {
           )
         }
       } finally {
-        if (active) setLoading(false)
+        if (active) {
+          setLoading(false)
+        }
       }
     }
 
@@ -380,7 +402,7 @@ export default function ExerciseLibrary() {
       active = false
       window.clearTimeout(timeout)
     }
-  }, [filters])
+  }, [filters, retryKey])
 
   async function openExercise(id: number) {
     setDetailLoading(true)
@@ -447,6 +469,7 @@ export default function ExerciseLibrary() {
         </p>
       </header>
 
+      {/* Search and filters */}
       <section className="rounded-2xl border border-white/10 bg-[#171a15] p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
@@ -454,6 +477,7 @@ export default function ExerciseLibrary() {
               size={18}
               className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35"
             />
+
             <input
               type="search"
               value={search}
@@ -472,6 +496,7 @@ export default function ExerciseLibrary() {
           >
             <SlidersHorizontal size={17} />
             Filters
+
             {activeFilterCount > 0 && (
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#c5f66a] px-1 text-[10px] font-bold text-[#10120f]">
                 {activeFilterCount}
@@ -512,6 +537,7 @@ export default function ExerciseLibrary() {
                 <span className="text-xs font-semibold text-white/55">
                   {filter.label}
                 </span>
+
                 <select
                   value={filter.value}
                   onChange={(event) =>
@@ -538,7 +564,7 @@ export default function ExerciseLibrary() {
                 onClick={clearFilters}
                 className="inline-flex items-center gap-2 text-xs font-semibold text-white/45 transition hover:text-[#c5f66a]"
               >
-                <RotateCcwIcon />
+                <ArrowLeft size={14} />
                 Clear all filters
               </button>
             </div>
@@ -546,9 +572,11 @@ export default function ExerciseLibrary() {
         )}
       </section>
 
+      {/* Exercise count */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Explore exercises</h2>
+
           <p className="mt-1 text-xs text-white/40">
             {loading
               ? 'Finding exercises...'
@@ -562,41 +590,26 @@ export default function ExerciseLibrary() {
         </span>
       </div>
 
+      {/* Reusable loading, error and empty states */}
       {loading ? (
-        <div className="flex items-center justify-center gap-3 rounded-2xl border border-white/10 bg-[#171a15] p-12 text-sm text-white/55">
-          <LoaderCircle size={20} className="animate-spin text-[#c5f66a]" />
-          Loading exercise library...
-        </div>
+        <LoadingState
+          title="Loading exercise library"
+          description="Finding exercises matching your search and filters..."
+        />
       ) : error ? (
-        <div
-          role="alert"
-          className="rounded-2xl border border-red-400/20 bg-red-400/10 p-5 text-sm text-red-300"
-        >
-          <p className="font-semibold">Could not load exercises</p>
-          <p className="mt-2">{error}</p>
-          <button
-            type="button"
-            onClick={() => setSearch((value) => `${value}`)}
-            className="mt-4 rounded-full border border-red-300/20 px-4 py-2 text-xs font-semibold hover:bg-red-400/10"
-          >
-            Retry by refreshing the page
-          </button>
-        </div>
+        <ErrorState
+          title="Could not load exercises"
+          message={error}
+          onRetry={() => setRetryKey((value) => value + 1)}
+          retryLabel="Try again"
+        />
       ) : exercises.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-[#171a15] p-12 text-center">
-          <Search size={30} className="mx-auto text-white/30" />
-          <h3 className="mt-4 font-semibold">No exercises found</h3>
-          <p className="mt-2 text-sm text-white/45">
-            Try another search term or clear your filters.
-          </p>
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="mt-5 rounded-full bg-[#c5f66a] px-5 py-2.5 text-sm font-semibold text-[#10120f] transition hover:bg-white"
-          >
-            Clear filters
-          </button>
-        </div>
+        <EmptyState
+          title="No exercises found"
+          description="Try another search term or clear your filters to explore more exercises."
+          actionLabel="Clear filters"
+          onAction={clearFilters}
+        />
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {exercises.map((exercise) => (
@@ -609,18 +622,23 @@ export default function ExerciseLibrary() {
         </div>
       )}
 
+      {/* Exercise detail loading */}
       {detailLoading && (
         <div
           role="status"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
         >
           <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#171a15] px-6 py-5 text-sm text-white/70">
-            <LoaderCircle size={20} className="animate-spin text-[#c5f66a]" />
+            <LoaderCircle
+              size={20}
+              className="animate-spin text-[#c5f66a]"
+            />
             Loading exercise details...
           </div>
         </div>
       )}
 
+      {/* Exercise detail error */}
       {detailError && (
         <div
           role="alert"
@@ -628,6 +646,7 @@ export default function ExerciseLibrary() {
         >
           <div className="flex items-start justify-between gap-4">
             {detailError}
+
             <button
               type="button"
               onClick={() => setDetailError('')}
@@ -639,6 +658,7 @@ export default function ExerciseLibrary() {
         </div>
       )}
 
+      {/* Exercise detail modal */}
       {selectedExercise && (
         <ExerciseDetailModal
           exercise={selectedExercise}
@@ -654,8 +674,4 @@ export default function ExerciseLibrary() {
       </p>
     </div>
   )
-}
-
-function RotateCcwIcon() {
-  return <ArrowLeft size={14} />
 }

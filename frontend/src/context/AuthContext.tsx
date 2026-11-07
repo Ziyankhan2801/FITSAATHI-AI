@@ -1,34 +1,19 @@
-
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useState,
   type ReactNode,
 } from 'react'
 
-import {
-  getCurrentUser,
-  type AuthUser,
-} from '../services/api'
-
-interface AuthContextType {
-  user: AuthUser | null
-  isLoading: boolean
-  refreshUser: () => Promise<void>
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(
-  undefined,
-)
+import { getCurrentUser } from '../services/api'
+import { AuthContext } from './auth-context'
 
 interface AuthProviderProps {
   children: ReactNode
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<AuthUser | null>(null)
+  const [user, setUser] = useState<import('../services/api').AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   const refreshUser = useCallback(async () => {
@@ -43,8 +28,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   useEffect(() => {
-    void refreshUser()
-  }, [refreshUser])
+    let active = true
+
+    async function loadInitialUser() {
+      try {
+        const currentUser = await getCurrentUser()
+
+        if (active) {
+          setUser(currentUser)
+        }
+      } catch {
+        if (active) {
+          setUser(null)
+        }
+      } finally {
+        if (active) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadInitialUser()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <AuthContext.Provider
@@ -57,16 +66,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-
-  if (!context) {
-    throw new Error(
-      'useAuth must be used inside an AuthProvider.',
-    )
-  }
-
-  return context
 }

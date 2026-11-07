@@ -60,6 +60,10 @@ export default function FitnessAssessment() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [workoutWeekdays, setWorkoutWeekdays] = useState<number[]>([])
+
+  // Calculate once instead of calling Date during every render.
+  const [maxBirthDate] = useState(() => new Date().toLocaleDateString('en-CA'))
 
   useEffect(() => {
     let active = true
@@ -67,6 +71,8 @@ export default function FitnessAssessment() {
     getFitnessProfile()
       .then((profile) => {
         if (!active) return
+
+        setWorkoutWeekdays(profile.workout_weekdays ?? [])
 
         const validGoals = [
           'weight_loss',
@@ -263,6 +269,7 @@ export default function FitnessAssessment() {
         fitness_goal: form.fitness_goal,
         experience_level: form.experience_level,
         workout_days_per_week: days,
+        workout_weekdays: workoutWeekdays,
         workout_minutes: minutes,
         equipment_level: form.equipment_level,
         dietary_preference: form.dietary_preference,
@@ -358,7 +365,7 @@ export default function FitnessAssessment() {
                 className={inputClass}
                 type="date"
                 value={form.date_of_birth}
-                max={new Date().toLocaleDateString('en-CA')}
+                max={maxBirthDate}
                 onChange={(e) => updateField('date_of_birth', e.target.value)}
               />
             </Field>

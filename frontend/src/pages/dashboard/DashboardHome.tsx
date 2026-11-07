@@ -7,10 +7,12 @@ import {
   Flame,
   HeartPulse,
   Target,
-  LoaderCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import LoadingState from '../../components/common/LoadingState'
+import ErrorState from '../../components/common/ErrorState'
+import EmptyState from '../../components/common/EmptyState'
 import {
   checkBackendHealth,
   getFitnessProfile,
@@ -81,17 +83,21 @@ export default function DashboardHome() {
   const [backendMessage, setBackendMessage] = useState(
     'Checking backend connection...',
   )
+  const [backendRetry, setBackendRetry] = useState(0)
 
   const [profile, setProfile] = useState<FitnessProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [profileError, setProfileError] = useState('')
+  const [profileRetry, setProfileRetry] = useState(0)
 
   const [workoutHistory, setWorkoutHistory] = useState<
     WorkoutHistoryRecord[]
   >([])
   const [workoutLoading, setWorkoutLoading] = useState(true)
   const [workoutError, setWorkoutError] = useState('')
+  const [workoutRetry, setWorkoutRetry] = useState(0)
 
+  // Backend connection check with retry support.
   useEffect(() => {
     let active = true
 
@@ -108,6 +114,15 @@ export default function DashboardHome() {
           setBackendMessage('Backend connection failed.')
         }
       })
+
+    return () => {
+      active = false
+    }
+  }, [backendRetry])
+
+  // Fitness profile loading with retry support.
+  useEffect(() => {
+    let active = true
 
     getFitnessProfile()
       .then((data) => {
@@ -130,11 +145,19 @@ export default function DashboardHome() {
         }
       })
 
+    return () => {
+      active = false
+    }
+  }, [profileRetry])
+
+  // Workout history loading with retry support.
+  useEffect(() => {
+    let active = true
+
     getWorkoutHistory()
       .then((data) => {
         if (active) {
           setWorkoutHistory(data)
-          setWorkoutError('')
         }
       })
       .catch((err: unknown) => {
@@ -155,13 +178,12 @@ export default function DashboardHome() {
     return () => {
       active = false
     }
-  }, [])
+  }, [workoutRetry])
 
   const assessmentComplete = profile
     ? isAssessmentComplete(profile)
     : false
 
-  // Each history record represents one completed workout on a saved date.
   const completedWorkouts = workoutHistory.length
 
   const totalExercisesCompleted = workoutHistory.reduce(
@@ -173,7 +195,8 @@ export default function DashboardHome() {
     workoutHistory.map((session) => session.workout_date),
   )
 
-  const today = new Date()
+  // Keep one stable date reference for this dashboard render lifecycle.
+  const [today] = useState(() => new Date())
   const todayKey = getLocalDateKey(today)
 
   // Build the current Monday-to-Sunday activity view.
@@ -227,11 +250,9 @@ export default function DashboardHome() {
   const overviewItems = [
     {
       label: 'Workouts completed',
-      value: workoutLoading
+      value: workoutLoading || workoutError
         ? '—'
-        : workoutError
-          ? '—'
-          : String(completedWorkouts),
+        : String(completedWorkouts),
       detail: workoutLoading
         ? 'Loading workout data...'
         : workoutError
@@ -241,11 +262,9 @@ export default function DashboardHome() {
     },
     {
       label: 'Exercises completed',
-      value: workoutLoading
+      value: workoutLoading || workoutError
         ? '—'
-        : workoutError
-          ? '—'
-          : String(totalExercisesCompleted),
+        : String(totalExercisesCompleted),
       detail: workoutLoading
         ? 'Loading workout data...'
         : workoutError
@@ -272,6 +291,7 @@ export default function DashboardHome() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
+      {/* Backend connection status */}
       <section
         aria-live="polite"
         className="flex items-start gap-3 rounded-xl border border-white/10 bg-[#171a15] p-4"
@@ -286,7 +306,7 @@ export default function DashboardHome() {
           }`}
         />
 
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">
             Backend:{' '}
             {backendStatus === 'connected'
@@ -295,10 +315,28 @@ export default function DashboardHome() {
                 ? 'Disconnected'
                 : 'Checking...'}
           </p>
-          <p className="mt-1 text-xs text-white/50">{backendMessage}</p>
+
+          <p className="mt-1 text-xs text-white/70">
+            {backendMessage}
+          </p>
         </div>
+
+        {backendStatus === 'error' && (
+          <button
+            type="button"
+            onClick={() => {
+              setBackendStatus('checking')
+              setBackendMessage('Checking backend connection...')
+              setBackendRetry((value) => value + 1)
+            }}
+            className="shrink-0 text-xs font-semibold text-[#c5f66a] hover:text-[#d6ff8c]"
+          >
+            Retry
+          </button>
+        )}
       </section>
 
+      {/* Welcome section */}
       <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div>
           <p className="text-sm font-medium text-[#c5f66a]">
@@ -309,7 +347,7 @@ export default function DashboardHome() {
             One step at a time.
           </h2>
 
-          <p className="mt-3 max-w-xl text-sm leading-6 text-white/50 sm:text-base">
+          <p className="mt-3 max-w-xl text-sm leading-6 text-white/70 sm:text-base">
             No gym required. Start where you are and build habits that work
             for your life.
           </p>
@@ -317,13 +355,14 @@ export default function DashboardHome() {
 
         <Link
           to="/dashboard/workouts"
-          className="inline-flex items-center justify-center gap-2 self-start rounded-full bg-[#c5f66a] px-5 py-3 text-sm font-semibold text-[#10120f] transition hover:bg-[#d6ff8c] sm:self-auto"
+          className="inline-flex items-center justify-center gap-2 self-start rounded-full bg-[#c5f66a] px-5 py-3 text-sm font-semibold !text-[#10120f] transition hover:bg-[#d6ff8c] sm:self-auto"
         >
           Explore workouts
           <ArrowRight size={17} />
         </Link>
       </section>
 
+      {/* Fitness overview */}
       <section
         aria-label="Fitness overview"
         className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
@@ -335,7 +374,7 @@ export default function DashboardHome() {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm text-white/50">{label}</p>
+                <p className="text-sm text-white/70">{label}</p>
                 <p className="mt-4 text-3xl font-bold tracking-tight">
                   {value}
                 </p>
@@ -346,11 +385,12 @@ export default function DashboardHome() {
               </span>
             </div>
 
-            <p className="mt-4 text-xs text-white/40">{detail}</p>
+            <p className="mt-4 text-xs text-white/70">{detail}</p>
           </article>
         ))}
       </section>
 
+      {/* Weekly activity and assessment */}
       <section className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
         <article className="rounded-2xl border border-white/10 bg-[#171a15] p-5 sm:p-7">
           <div className="flex items-center gap-3">
@@ -360,50 +400,80 @@ export default function DashboardHome() {
 
             <div>
               <h3 className="font-semibold">Your weekly activity</h3>
-              <p className="mt-1 text-xs text-white/45">
+              <p className="mt-1 text-xs text-white/70">
                 A fresh week to build your routine
               </p>
             </div>
           </div>
 
-          <div className="mt-8 grid grid-cols-7 gap-2">
-            {weeklyActivity.map(
-              ({ day, date, sessionCount, exerciseCount }) => {
-                const hasActivity = sessionCount > 0
-                const isToday =
-                  date.toDateString() === new Date().toDateString()
+          {workoutLoading ? (
+            <div className="mt-6">
+              <LoadingState
+                title="Loading weekly activity"
+                description="Fetching your completed workouts..."
+              />
+            </div>
+          ) : workoutError ? (
+            <div className="mt-6">
+              <ErrorState
+                title="Workout activity unavailable"
+                message={workoutError}
+                onRetry={() => {
+                  setWorkoutLoading(true)
+                  setWorkoutError('')
+                  setWorkoutRetry((value) => value + 1)
+                }}
+              />
+            </div>
+          ) : completedWorkouts === 0 ? (
+            <div className="mt-6">
+              <EmptyState
+                title="Your activity starts here"
+                description="Complete your first workout and your weekly activity will appear here."
+                actionLabel="Explore workouts"
+                onAction={() => {
+                  window.location.href = '/dashboard/workouts'
+                }}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="mt-8 grid grid-cols-7 gap-2">
+                {weeklyActivity.map(
+                  ({ day, date, sessionCount, exerciseCount }) => {
+                    const hasActivity = sessionCount > 0
+                    const isToday =
+                      date.toDateString() === today.toDateString()
 
-                return (
-                  <div key={day} className="min-w-0 text-center">
-                    <div
-                      title={`${date.toLocaleDateString()} · ${sessionCount} completed workouts · ${exerciseCount} exercises`}
-                      className={`mx-auto flex aspect-square max-w-12 items-center justify-center rounded-xl border ${
-                        hasActivity
-                          ? 'border-[#c5f66a]/40 bg-[#c5f66a]/15 text-[#c5f66a]'
-                          : isToday
-                            ? 'border-white/25 bg-white/[0.06] text-white/60'
-                            : 'border-white/10 bg-white/[0.03] text-white/35'
-                      }`}
-                    >
-                      <span className="text-xs font-semibold">
-                        {hasActivity ? exerciseCount : '—'}
-                      </span>
-                    </div>
+                    return (
+                      <div key={day} className="min-w-0 text-center">
+                        <div
+                          title={`${date.toLocaleDateString()} · ${sessionCount} completed workouts · ${exerciseCount} exercises`}
+                          className={`mx-auto flex aspect-square max-w-12 items-center justify-center rounded-xl border ${
+                            hasActivity
+                              ? 'border-[#c5f66a]/40 bg-[#c5f66a]/15 text-[#c5f66a]'
+                              : isToday
+                                ? 'border-white/25 bg-white/[0.06] text-white/70'
+                                : 'border-white/10 bg-white/[0.03] text-white/70'
+                          }`}
+                        >
+                          <span className="text-xs font-semibold">
+                            {hasActivity ? exerciseCount : '—'}
+                          </span>
+                        </div>
 
-                    <p className="mt-2 text-xs text-white/45">{day}</p>
-                  </div>
-                )
-              },
-            )}
-          </div>
+                        <p className="mt-2 text-xs text-white/70">{day}</p>
+                      </div>
+                    )
+                  },
+                )}
+              </div>
 
-          <p className="mt-6 text-xs leading-5 text-white/40">
-            {workoutLoading
-              ? 'Loading your workout activity...'
-              : workoutError
-                ? 'Workout activity could not be loaded.'
-                : 'Numbers show exercises from completed history records for each date.'}
-          </p>
+              <p className="mt-6 text-xs leading-5 text-white/70">
+                Numbers show exercises from completed history records for each date.
+              </p>
+            </>
+          )}
 
           <Link
             to="/dashboard/workout-history"
@@ -413,39 +483,38 @@ export default function DashboardHome() {
           </Link>
         </article>
 
+        {/* Fitness assessment */}
         <article className="rounded-2xl border border-[#c5f66a]/15 bg-gradient-to-br from-[#c5f66a]/10 to-transparent p-5 sm:p-7">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#c5f66a]/10 text-[#c5f66a]">
             <Target size={22} />
           </span>
 
           {profileLoading ? (
-            <>
-              <h3 className="mt-5 text-xl font-semibold">
-                Loading your assessment
-              </h3>
-
-              <LoaderCircle
-                className="mt-4 animate-spin text-[#c5f66a]"
-                size={20}
+            <div className="mt-5">
+              <LoadingState
+                title="Loading your assessment"
+                description="Fetching your saved fitness details..."
               />
-            </>
+            </div>
           ) : profileError ? (
-            <>
-              <h3 className="mt-5 text-xl font-semibold">
-                Assessment unavailable
-              </h3>
-
-              <p role="alert" className="mt-3 text-sm leading-6 text-white/55">
-                {profileError}
-              </p>
+            <div className="mt-5">
+              <ErrorState
+                title="Assessment unavailable"
+                message={profileError}
+                onRetry={() => {
+                  setProfileLoading(true)
+                  setProfileError('')
+                  setProfileRetry((value) => value + 1)
+                }}
+              />
 
               <Link
                 to="/dashboard/assessment"
-                className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#c5f66a]"
+                className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#c5f66a]"
               >
                 Open assessment <ArrowRight size={17} />
               </Link>
-            </>
+            </div>
           ) : (
             <>
               <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -466,7 +535,7 @@ export default function DashboardHome() {
                 </span>
               </div>
 
-              <p className="mt-3 text-sm leading-6 text-white/55">
+              <p className="mt-3 text-sm leading-6 text-white/70">
                 {assessmentComplete
                   ? 'Your saved fitness details are ready to personalise your journey.'
                   : 'Fill in the required details so your fitness plan can be tailored to you.'}
@@ -475,14 +544,14 @@ export default function DashboardHome() {
               {profile && (
                 <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-[#10120f]/60 p-4 text-sm">
                   <div className="flex justify-between gap-3">
-                    <span className="text-white/45">Fitness goal</span>
+                    <span className="text-white/70">Fitness goal</span>
                     <span className="text-right font-medium">
                       {formatGoal(profile.fitness_goal)}
                     </span>
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span className="text-white/45">Height</span>
+                    <span className="text-white/70">Height</span>
                     <span className="font-medium">
                       {profile.height_cm !== null
                         ? `${profile.height_cm} cm`
@@ -491,7 +560,7 @@ export default function DashboardHome() {
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span className="text-white/45">Weight</span>
+                    <span className="text-white/70">Weight</span>
                     <span className="font-medium">
                       {profile.weight_kg !== null
                         ? `${profile.weight_kg} kg`
@@ -500,7 +569,7 @@ export default function DashboardHome() {
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span className="text-white/45">Workout routine</span>
+                    <span className="text-white/70">Workout routine</span>
                     <span className="text-right font-medium">
                       {profile.workout_days_per_week !== null &&
                       profile.workout_minutes !== null
@@ -510,7 +579,7 @@ export default function DashboardHome() {
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span className="text-white/45">Equipment</span>
+                    <span className="text-white/70">Equipment</span>
                     <span className="text-right font-medium">
                       {formatEquipment(profile.equipment_level)}
                     </span>
@@ -530,20 +599,15 @@ export default function DashboardHome() {
         </article>
       </section>
 
-      {workoutError && (
-        <p role="alert" className="text-sm text-red-300">
-          Workout data could not be loaded: {workoutError}
-        </p>
-      )}
-
+      {/* Motivation */}
       <section className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/65">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/70">
           <HeartPulse size={21} />
         </span>
 
         <div>
           <h3 className="font-semibold">Your pace. Your progress.</h3>
-          <p className="mt-2 text-sm leading-6 text-white/45">
+          <p className="mt-2 text-sm leading-6 text-white/70">
             Start gently, focus on proper form and rest when needed. Your plan
             should adapt to your abilities, not push you beyond them.
           </p>

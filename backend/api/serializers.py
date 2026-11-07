@@ -17,6 +17,9 @@ from .models import (
     WorkoutHistory,
     WorkoutSession,
     Exercise,
+    Equipment,
+    FoodItem,
+    MealEntry,
 )
 
 
@@ -88,6 +91,11 @@ class RegistrationSerializer(serializers.ModelSerializer):
 
 class FitnessProfileSerializer(serializers.ModelSerializer):
     age = serializers.SerializerMethodField(read_only=True)
+    available_equipment = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Equipment.objects.filter(is_active=True),
+        required=False,
+    )
 
     class Meta:
         model = FitnessProfile
@@ -100,8 +108,12 @@ class FitnessProfileSerializer(serializers.ModelSerializer):
             'fitness_goal',
             'experience_level',
             'workout_days_per_week',
+            'workout_weekdays',
             'workout_minutes',
             'equipment_level',
+            'gym_type',
+            'training_style',
+            'available_equipment',
             'dietary_preference',
             'sleep_hours',
             'has_health_limitation',
@@ -128,6 +140,29 @@ class FitnessProfileSerializer(serializers.ModelSerializer):
         if value and value > timezone.localdate():
             raise serializers.ValidationError(
                 'Date of birth cannot be in the future.'
+            )
+
+        return value
+
+    def validate_workout_weekdays(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError(
+                'Workout weekdays must be provided as a list.'
+            )
+
+        if any(type(day) is not int or day < 0 or day > 6 for day in value):
+            raise serializers.ValidationError(
+                'Each workout weekday must be an integer from 0 to 6.'
+            )
+
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError(
+                'Duplicate workout weekdays are not allowed.'
+            )
+
+        if len(value) > 7:
+            raise serializers.ValidationError(
+                'You cannot select more than 7 workout weekdays.'
             )
 
         return value
@@ -170,6 +205,8 @@ class WorkoutSessionSerializer(serializers.ModelSerializer):
             'id',
             'started_at',
             'updated_at',
+            'completed_at',
+            'workout_date',
         ]
 
     def validate_completed_exercises(self, value):
@@ -223,20 +260,6 @@ class WorkoutSessionSerializer(serializers.ModelSerializer):
                 })
         else:
             attrs['completion_percentage'] = expected_percentage
-
-        if expected_percentage == 100 and total > 0:
-            attrs['completed_at'] = (
-                attrs.get('completed_at')
-                or (
-                    self.instance.completed_at
-                    if self.instance else None
-                )
-            )
-
-            if not attrs.get('workout_date') and not (
-                self.instance and self.instance.workout_date
-            ):
-                attrs['workout_date'] = timezone.localdate()
 
         return attrs
 
@@ -360,6 +383,23 @@ class PrivacyConsentSerializer(serializers.ModelSerializer):
             },
         }
 
+    def validate(self, attrs):
+        # A consent category is fixed once its record has been created.
+        if self.instance is not None:
+            requested_type = self.initial_data.get('consent_type')
+
+            if (
+                requested_type is not None
+                and requested_type != self.instance.consent_type
+            ):
+                raise serializers.ValidationError({
+                    'consent_type': (
+                        'Consent type cannot be changed after creation.'
+                    )
+                })
+
+        return attrs
+
     def create(self, validated_data):
         is_granted = validated_data.get('is_granted', False)
 
@@ -382,6 +422,7 @@ class PrivacyConsentSerializer(serializers.ModelSerializer):
             validated_data['withdrawn_at'] = timezone.now()
 
         return super().update(instance, validated_data)
+
 
 class ProgressPhotoSerializer(serializers.ModelSerializer):
     """
@@ -516,42 +557,28 @@ class ProgressPhotoSerializer(serializers.ModelSerializer):
 
 
 
-from .models import Exercise
-
-
-class ExerciseSerializer(serializers.ModelSerializer):
+class EquipmentSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Exercise
+        model = Equipment
         fields = [
             'id',
             'name',
             'slug',
-            'description',
-            'instructions',
             'category',
-            'muscle_group',
-            'difficulty',
-            'equipment',
-            'sets',
-            'reps',
-            'rest_seconds',
-            'image_url',
-            'video_url',
-            'safety_tips',
+            'description',
             'is_active',
             'created_at',
-            'updated_at',
         ]
-
-        read_only_fields = [
-            'id',
-            'created_at',
-            'updated_at',
-        ]
-
+        read_only_fields = ['id', 'created_at']
 
 
 class ExerciseSerializer(serializers.ModelSerializer):
+    required_equipment = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Equipment.objects.filter(is_active=True),
+        required=False,
+    )
+
     class Meta:
         model = Exercise
         fields = [
@@ -564,6 +591,8 @@ class ExerciseSerializer(serializers.ModelSerializer):
             'muscle_group',
             'difficulty',
             'equipment',
+            'required_equipment',
+            'training_style',
             'sets',
             'reps',
             'rest_seconds',
@@ -580,7 +609,6 @@ class ExerciseSerializer(serializers.ModelSerializer):
             'updated_at',
             'is_active',
         ]
-
 
 
 from .models import WorkoutPlan, WorkoutPlanExercise
@@ -625,3 +653,110 @@ class WorkoutPlanSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+
+from .models import AIConversation, AIMessage
+
+
+class AIMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIMessage
+        fields = ["id", "role", "content", "created_at"]
+        read_only_fields = fields
+
+
+class AIConversationSerializer(serializers.ModelSerializer):
+    messages = AIMessageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = AIConversation
+        fields = ["id", "title", "messages", "created_at", "updated_at"]
+        read_only_fields = fields
+
+
+
+
+class FoodItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FoodItem
+        fields = [
+            'id',
+            'name',
+            'slug',
+            'category',
+            'serving_size_g',
+            'calories',
+            'protein_g',
+            'carbohydrates_g',
+            'fat_g',
+            'fiber_g',
+            'is_vegetarian',
+        ]
+        read_only_fields = ['id']
+
+
+class MealEntrySerializer(serializers.ModelSerializer):
+    food = serializers.PrimaryKeyRelatedField(
+        queryset=FoodItem.objects.filter(is_active=True),
+    )
+
+    food_name = serializers.CharField(
+        source='food.name',
+        read_only=True,
+    )
+    food_nutrition = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MealEntry
+        fields = [
+            'id',
+            'food',
+            'food_name',
+            'food_nutrition',
+            'meal_type',
+            'quantity_g',
+            'meal_date',
+            'notes',
+            'created_at',
+        ]
+        read_only_fields = [
+            'id',
+            'food_name',
+            'food_nutrition',
+            'created_at',
+        ]
+
+    def get_food_nutrition(self, obj):
+        food = obj.food
+        quantity = float(obj.quantity_g)
+        serving_size = float(food.serving_size_g)
+
+        multiplier = quantity / serving_size
+
+        return {
+            'calories': round(float(food.calories) * multiplier, 2),
+            'protein_g': round(float(food.protein_g) * multiplier, 2),
+            'carbohydrates_g': round(
+                float(food.carbohydrates_g) * multiplier, 2
+            ),
+            'fat_g': round(float(food.fat_g) * multiplier, 2),
+            'fiber_g': round(float(food.fiber_g) * multiplier, 2),
+        }
+
+    def validate_meal_date(self, value):
+        if value > timezone.localdate():
+            raise serializers.ValidationError(
+                'Meal date cannot be in the future.'
+            )
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+
+        if request is None or not request.user.is_authenticated:
+            raise serializers.ValidationError(
+                'Authentication is required to log meals.'
+            )
+
+        return attrs

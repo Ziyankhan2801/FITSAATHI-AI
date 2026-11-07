@@ -1,5 +1,7 @@
-
 import { useEffect, useState, type FormEvent } from 'react'
+import LoadingState from '../../components/common/LoadingState'
+import ErrorState from '../../components/common/ErrorState'
+import EmptyState from '../../components/common/EmptyState'
 import {
   Activity,
   Plus,
@@ -9,11 +11,11 @@ import {
   Camera,
   ShieldCheck,
   Upload,
-  Image as ImageIcon,
 } from 'lucide-react'
 
 import {
   getBodyMeasurements,
+  getWorkoutHistory,
   createBodyMeasurement,
   deleteBodyMeasurement,
   getFitnessProfile,
@@ -49,8 +51,12 @@ const labelClass = 'mb-2 block text-xs font-medium text-white/55'
 
 export default function Progress() {
   const [measurements, setMeasurements] = useState<BodyMeasurement[]>([])
+  const [workoutHistory, setWorkoutHistory] = useState<Awaited<ReturnType<typeof getWorkoutHistory>>>([])
   const [profile, setProfile] = useState<FitnessProfile | null>(null)
   const [form, setForm] = useState(emptyForm)
+  const [maxMeasurementDate] = useState(() =>
+    new Date().toLocaleDateString('en-CA'),
+  )
 
   const [consents, setConsents] = useState<PrivacyConsent[]>([])
   const [photos, setPhotos] = useState<ProgressPhoto[]>([])
@@ -63,6 +69,8 @@ export default function Progress() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [retryKey, setRetryKey] = useState(0)
   const [success, setSuccess] = useState('')
 
   const photoConsent =
@@ -105,18 +113,21 @@ export default function Progress() {
 
   async function loadData() {
     setLoading(true)
+    setLoadError('')
     setError('')
 
     try {
-      const [measurementData, profileData, consentData, photoData] =
+      const [measurementData, profileData, consentData, photoData, workoutData] =
         await Promise.all([
           getBodyMeasurements(),
           getFitnessProfile(),
           getPrivacyConsents(),
           getProgressPhotos(),
+          getWorkoutHistory(),
         ])
 
       setMeasurements(measurementData)
+      setWorkoutHistory(workoutData)
       setProfile(profileData)
       setConsents(consentData)
       setPhotos(photoData)
@@ -135,7 +146,7 @@ export default function Progress() {
         })
       }
     } catch (err) {
-      setError(
+      setLoadError(
         err instanceof Error ? err.message : 'Could not load progress data.',
       )
     } finally {
@@ -144,15 +155,97 @@ export default function Progress() {
   }
 
   useEffect(() => {
-    void loadData()
+    let active = true
+
+    async function loadInitialData() {
+      try {
+        const [
+          measurementData,
+          profileData,
+          consentData,
+          photoData,
+          workoutData,
+        ] = await Promise.all([
+          getBodyMeasurements(),
+          getFitnessProfile(),
+          getPrivacyConsents(),
+          getProgressPhotos(),
+          getWorkoutHistory(),
+        ])
+
+        if (!active) return
+
+        setMeasurements(measurementData)
+        setWorkoutHistory(workoutData)
+        setProfile(profileData)
+        setConsents(consentData)
+        setPhotos(photoData)
+
+        const canLoadPhotos = consentData.some(
+          (item) =>
+            item.consent_type === 'photo_storage' && item.is_granted,
+        )
+
+        if (canLoadPhotos) {
+          const entries = await Promise.all(
+            photoData.map(async (photo) => {
+              try {
+                const response = await fetch(
+                  getProgressPhotoImageUrl(photo.id),
+                  { credentials: 'include' },
+                )
+
+                if (!response.ok) return null
+
+                const blob = await response.blob()
+                return [photo.id, URL.createObjectURL(blob)] as const
+              } catch {
+                return null
+              }
+            }),
+          )
+
+          const nextImages: Record<number, string> = {}
+          entries.forEach((entry) => {
+            if (entry) nextImages[entry[0]] = entry[1]
+          })
+
+          if (!active) {
+            Object.values(nextImages).forEach((url) =>
+              URL.revokeObjectURL(url),
+            )
+            return
+          }
+
+          setPhotoImages(nextImages)
+        } else {
+          setPhotoImages({})
+        }
+      } catch (err) {
+        if (active) {
+          setLoadError(
+            err instanceof Error
+              ? err.message
+              : 'Could not load progress data.',
+          )
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    void loadInitialData()
 
     return () => {
-      setPhotoImages((previous) => {
-        Object.values(previous).forEach((url) => URL.revokeObjectURL(url))
-        return {}
-      })
+      active = false
     }
-  }, [])
+  }, [retryKey])
+
+  useEffect(() => {
+    return () => {
+      Object.values(photoImages).forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [photoImages])
 
   const latestMeasurement = measurements[0]
   const previousMeasurement = measurements[1]
@@ -177,6 +270,47 @@ export default function Progress() {
       ? Number(latestMeasurement.weight_kg) -
         Number(previousMeasurement.weight_kg)
       : null
+
+  // Sort a copy for charts; API history is displayed newest-first elsewhere.
+  const chartMeasurements = [...measurements]
+    .filter((item) => Number.isFinite(Number(item.weight_kg)))
+    .sort(
+      (a, b) =>
+        new Date(`${a.measurement_date}T00:00:00`).getTime() -
+        new Date(`${b.measurement_date}T00:00:00`).getTime(),
+    )
+    .slice(-8)
+
+  const weightValues = chartMeasurements.map((item) => Number(item.weight_kg))
+  const weightMin = weightValues.length ? Math.min(...weightValues) : 0
+  const weightMax = weightValues.length ? Math.max(...weightValues) : 0
+  const weightRange = Math.max(weightMax - weightMin, 1)
+  const workoutCount = workoutHistory.length
+  const averageCompletion = workoutCount
+    ? Math.round(
+        workoutHistory.reduce(
+          (total, session) => total + Number(session.completion_percentage || 0),
+          0,
+        ) / workoutCount,
+      )
+    : 0
+  const latestWorkout = workoutHistory[0]
+  const waistValues = chartMeasurements
+    .filter((item) => item.waist_cm !== null && item.waist_cm !== undefined)
+    .map((item) => Number(item.waist_cm))
+  const waistChange =
+    waistValues.length >= 2
+      ? waistValues[waistValues.length - 1] - waistValues[0]
+      : null
+
+  const progressInsight =
+    workoutCount === 0
+      ? 'Complete and save your first workout to unlock activity insights.'
+      : averageCompletion < 70
+        ? 'Try choosing a manageable workout length and completing each planned session at your own pace.'
+        : workoutCount < 3
+          ? 'Good start. Build consistency by recording your next few planned workouts.'
+          : 'You have a workout history to build on. Keep your schedule consistent and compare measurements over time.'
 
   function updateField(field: keyof typeof emptyForm, value: string) {
     setForm((previous) => ({ ...previous, [field]: value }))
@@ -330,6 +464,24 @@ export default function Progress() {
         </p>
       </section>
 
+      {loading ? (
+        <LoadingState
+          title="Loading your progress"
+          description="Fetching your measurements, workout history and progress photos..."
+        />
+      ) : loadError ? (
+        <ErrorState
+          title="Could not load progress"
+          message={loadError}
+          onRetry={() => {
+            setLoading(true)
+            setLoadError('')
+            setRetryKey((value) => value + 1)
+          }}
+          retryLabel="Try again"
+        />
+      ) : (
+        <>
       {error && (
         <p
           role="alert"
@@ -385,8 +537,115 @@ export default function Progress() {
         </article>
       </section>
 
+      {/* Level 10: progress analytics */}
+      <section className="grid gap-4 lg:grid-cols-2">
+        <article className="rounded-2xl border border-white/10 bg-[#171a15] p-5 sm:p-7">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold">Weight trend</h2>
+              <p className="mt-1 text-sm text-white/45">Your latest measurement records</p>
+            </div>
+            <Activity className="text-[#c5f66a]" size={22} />
+          </div>
+
+          {loading ? (
+            <p className="mt-8 text-sm text-white/45">Loading trend...</p>
+          ) : chartMeasurements.length < 2 ? (
+            <p className="mt-8 rounded-xl border border-dashed border-white/15 p-6 text-center text-sm text-white/45">
+              Add at least two weight records to see your trend.
+            </p>
+          ) : (
+            <div className="mt-6">
+              <div className="mb-3 flex justify-between text-xs text-white/45">
+                <span>{weightMax.toFixed(1)} kg</span>
+                <span>{weightMin.toFixed(1)} kg</span>
+              </div>
+              <svg viewBox="0 0 600 190" role="img" aria-label="Weight trend chart" className="h-44 w-full overflow-visible">
+                {[25, 70, 115, 160].map((y) => (
+                  <line key={y} x1="12" x2="588" y1={y} y2={y} stroke="currentColor" opacity="0.12" strokeDasharray="4 6" />
+                ))}
+                <polyline
+                  fill="none"
+                  stroke="#c5f66a"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  points={weightValues.map((value, index) => {
+                    const x = 18 + (index * 564) / Math.max(weightValues.length - 1, 1)
+                    const y = 160 - ((value - weightMin) / weightRange) * 125
+                    return `${x},${y}`
+                  }).join(' ')}
+                />
+                {weightValues.map((value, index) => {
+                  const x = 18 + (index * 564) / Math.max(weightValues.length - 1, 1)
+                  const y = 160 - ((value - weightMin) / weightRange) * 125
+                  return <circle key={`${chartMeasurements[index].id}-weight`} cx={x} cy={y} r="5" fill="#c5f66a" />
+                })}
+              </svg>
+              <div className="mt-2 flex justify-between text-xs text-white/40">
+                <span>{new Date(`${chartMeasurements[0].measurement_date}T00:00:00`).toLocaleDateString()}</span>
+                <span>{new Date(`${chartMeasurements[chartMeasurements.length - 1].measurement_date}T00:00:00`).toLocaleDateString()}</span>
+              </div>
+            </div>
+          )}
+        </article>
+
+        <article className="rounded-2xl border border-white/10 bg-[#171a15] p-5 sm:p-7">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold">Workout activity</h2>
+              <p className="mt-1 text-sm text-white/45">Based on saved workout history</p>
+            </div>
+            <Ruler className="text-[#c5f66a]" size={22} />
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-[#10120f] p-4">
+              <p className="text-xs text-white/45">Saved workouts</p>
+              <p className="mt-2 text-3xl font-bold">{loading ? '—' : workoutCount}</p>
+            </div>
+            <div className="rounded-xl bg-[#10120f] p-4">
+              <p className="text-xs text-white/45">Avg. completion</p>
+              <p className="mt-2 text-3xl font-bold">{loading ? '—' : `${averageCompletion}%`}</p>
+            </div>
+          </div>
+          <div className="mt-4 rounded-xl border border-white/10 p-4">
+            <p className="text-xs font-semibold text-[#c5f66a]">LATEST SESSION</p>
+            {latestWorkout ? (
+              <>
+                <p className="mt-2 font-medium">{latestWorkout.workout_title}</p>
+                <p className="mt-1 text-xs text-white/45">
+                  {latestWorkout.completion_percentage}% complete
+                  {latestWorkout.completed_at
+                    ? ` · ${new Date(latestWorkout.completed_at).toLocaleDateString()}`
+                    : ''}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-white/45">No saved workouts yet.</p>
+            )}
+          </div>
+        </article>
+      </section>
+
+      <section className="rounded-2xl border border-[#c5f66a]/15 bg-[#171a15] p-5 sm:p-7">
+        <p className="text-xs font-semibold tracking-wide text-[#c5f66a]">PROGRESS INSIGHT</p>
+        <h2 className="mt-2 text-lg font-semibold">Your next step</h2>
+        <p className="mt-2 text-sm leading-6 text-white/55">{loading ? 'Preparing your insight...' : progressInsight}</p>
+        {waistChange !== null && (
+          <p className="mt-3 text-xs text-white/40">
+            Waist measurement change across available records: {waistChange > 0 ? '+' : ''}{waistChange.toFixed(1)} cm. This is a measurement comparison, not a health assessment.
+          </p>
+        )}
+        <p className="mt-3 text-xs text-white/35">
+          Insights use saved records only. They are simple progress prompts, not medical advice or an AI-generated training prescription.
+        </p>
+      </section>
+
       {/* Measurement form */}
-      <section className="rounded-2xl border border-white/10 bg-[#171a15] p-5 sm:p-7">
+      <section
+        id="measurement-form"
+        className="rounded-2xl border border-white/10 bg-[#171a15] p-5 sm:p-7"
+      >
         <div className="mb-6">
           <h2 className="text-xl font-semibold">Add body measurements</h2>
           <p className="mt-2 text-sm text-white/45">
@@ -401,7 +660,7 @@ export default function Progress() {
               <input
                 type="date"
                 required
-                max={new Date().toLocaleDateString('en-CA')}
+                max={maxMeasurementDate}
                 value={form.measurement_date}
                 onChange={(e) =>
                   updateField('measurement_date', e.target.value)
@@ -479,9 +738,18 @@ export default function Progress() {
         {loading ? (
           <p className="mt-5 text-sm text-white/45">Loading measurements...</p>
         ) : measurements.length === 0 ? (
-          <p className="mt-5 rounded-xl border border-dashed border-white/15 p-6 text-center text-sm text-white/45">
-            No measurements yet. Add your first measurement above.
-          </p>
+          <div className="mt-5">
+            <EmptyState
+              title="No measurements yet"
+              description="Add your first body measurement to start tracking your fitness progress."
+              actionLabel="Add measurement"
+              onAction={() =>
+                document
+                  .querySelector('#measurement-form')
+                  ?.scrollIntoView({ behavior: 'smooth' })
+              }
+            />
+          </div>
         ) : (
           <div className="mt-5 space-y-3">
             {measurements.map((measurement) => (
@@ -644,11 +912,11 @@ export default function Progress() {
           ) : loading ? (
             <p className="mt-4 text-sm text-white/45">Loading photos...</p>
           ) : photos.length === 0 ? (
-            <div className="mt-4 rounded-xl border border-dashed border-white/15 p-8 text-center">
-              <ImageIcon className="mx-auto text-white/35" size={28} />
-              <p className="mt-3 text-sm text-white/45">
-                No progress photos uploaded yet.
-              </p>
+            <div className="mt-4">
+              <EmptyState
+                title="No progress photos yet"
+                description="Upload your first progress photo to start comparing your fitness journey over time."
+              />
             </div>
           ) : (
             <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -692,6 +960,8 @@ export default function Progress() {
           )}
         </div>
       </section>
+        </>
+      )}
     </div>
   )
 }

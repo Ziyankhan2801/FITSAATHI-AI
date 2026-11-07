@@ -12,6 +12,13 @@ from django.dispatch import receiver
 from .storage import PrivateMediaStorage
 
 
+from .models_nutrition_additions import (
+    NutritionSettings,
+    WaterIntake,
+    SleepLog
+)
+
+
 class FitnessProfile(models.Model):
     class FitnessGoal(models.TextChoices):
         WEIGHT_LOSS = 'weight_loss', 'Weight loss'
@@ -29,6 +36,32 @@ class FitnessProfile(models.Model):
         NONE = 'none', 'No equipment'
         BASIC = 'basic', 'Basic equipment'
         HOME_GYM = 'home_gym', 'Home gym'
+
+    class GymType(models.TextChoices):
+        HOME = 'home', 'Home workout'
+        COMMERCIAL = 'commercial', 'Commercial gym'
+        HOME_GYM = 'home_gym', 'Home gym'
+        CROSSFIT = 'crossfit', 'CrossFit / Functional gym'
+        POWERLIFTING = 'powerlifting', 'Powerlifting gym'
+        CALISTHENICS = 'calisthenics', 'Calisthenics park'
+        FITNESS_STUDIO = 'fitness_studio', 'Fitness studio'
+        OUTDOOR = 'outdoor', 'Outdoor training'
+        HOTEL = 'hotel', 'Hotel gym'
+
+    class TrainingStyle(models.TextChoices):
+        BODYBUILDING = 'bodybuilding', 'Bodybuilding / Hypertrophy'
+        STRENGTH = 'strength', 'Strength training'
+        POWERLIFTING = 'powerlifting', 'Powerlifting'
+        OLYMPIC_WEIGHTLIFTING = 'olympic_weightlifting', 'Olympic weightlifting'
+        FUNCTIONAL = 'functional', 'Functional training'
+        CROSSFIT = 'crossfit', 'CrossFit'
+        HIIT = 'hiit', 'HIIT'
+        CARDIO = 'cardio', 'Cardio / Endurance'
+        CALISTHENICS = 'calisthenics', 'Calisthenics'
+        YOGA = 'yoga', 'Yoga'
+        PILATES = 'pilates', 'Pilates'
+        MOBILITY = 'mobility', 'Mobility / Flexibility'
+        SPORTS = 'sports', 'Sports conditioning'
 
     class DietaryPreference(models.TextChoices):
         VEGETARIAN = 'vegetarian', 'Vegetarian'
@@ -72,6 +105,14 @@ class FitnessProfile(models.Model):
         blank=True,
         validators=[MinValueValidator(1), MaxValueValidator(7)],
     )
+
+    workout_weekdays = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Selected workout weekdays: 0=Monday through 6=Sunday.',
+    )
+
+
     workout_minutes = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
@@ -81,6 +122,18 @@ class FitnessProfile(models.Model):
         max_length=20,
         choices=EquipmentLevel.choices,
         blank=True,
+    )
+    gym_type = models.CharField(
+        max_length=30,
+        choices=GymType.choices,
+        blank=True,
+        default='',
+    )
+    training_style = models.CharField(
+        max_length=30,
+        choices=TrainingStyle.choices,
+        blank=True,
+        default='',
     )
     dietary_preference = models.CharField(
         max_length=20,
@@ -101,6 +154,11 @@ class FitnessProfile(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    available_equipment = models.ManyToManyField(
+        'Equipment',
+        blank=True,
+        related_name='fitness_profiles',
+    )
 
     class Meta:
         ordering = ['-updated_at']
@@ -269,10 +327,14 @@ class BodyMeasurement(models.Model):
 class PrivacyConsent(models.Model):
 
     class ConsentType(models.TextChoices):
+        AI_PROFILE_CONTEXT = (
+    'ai_profile_context',
+    'Personal fitness profile sharing with AI',
+)
         PHOTO_STORAGE = 'photo_storage', 'Progress photo storage'
         AI_ANALYSIS = 'ai_analysis', 'AI photo analysis'
-
-    user = models.ForeignKey(
+        AI_CHAT = 'ai_chat', 'AI fitness chat processing'
+        user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='privacy_consents',
@@ -428,6 +490,31 @@ def delete_progress_photo_file(sender, instance, **kwargs):
 
 
 
+class Equipment(models.Model):
+    class Category(models.TextChoices):
+        BODYWEIGHT = 'bodyweight', 'Bodyweight / No equipment'
+        FREE_WEIGHTS = 'free_weights', 'Free weights'
+        MACHINES = 'machines', 'Gym machines'
+        CABLES = 'cables', 'Cable equipment'
+        CARDIO = 'cardio', 'Cardio equipment'
+        ACCESSORIES = 'accessories', 'Accessories'
+
+    name = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=120, unique=True)
+    category = models.CharField(max_length=20, choices=Category.choices)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['category', 'name']
+        verbose_name = 'Equipment'
+        verbose_name_plural = 'Equipment catalog'
+
+    def __str__(self):
+        return self.name
+
+
 class Exercise(models.Model):
     class Category(models.TextChoices):
         STRENGTH = 'strength', 'Strength'
@@ -487,6 +574,18 @@ class Exercise(models.Model):
         max_length=30,
         choices=Equipment.choices,
         default=Equipment.NONE,
+    )
+    required_equipment = models.ManyToManyField(
+        'Equipment',
+        blank=True,
+        related_name='exercises',
+    )
+    training_style = models.CharField(
+        max_length=30,
+        choices=FitnessProfile.TrainingStyle.choices,
+        blank=True,
+        default='',
+        db_index=True,
     )
 
     sets = models.PositiveSmallIntegerField(default=2)
@@ -588,3 +687,133 @@ class WorkoutPlanExercise(models.Model):
 
     def __str__(self):
         return f'{self.exercise.name} - {self.workout_plan.title}'
+
+
+class AIConversation(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='ai_conversations',
+    )
+    title = models.CharField(max_length=150, default='New conversation')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f'{self.title} - User {self.user_id}'
+
+
+class AIMessage(models.Model):
+    class Role(models.TextChoices):
+        USER = 'user', 'User'
+        ASSISTANT = 'assistant', 'Assistant'
+
+    conversation = models.ForeignKey(
+        AIConversation,
+        on_delete=models.CASCADE,
+        related_name='messages',
+    )
+    role = models.CharField(max_length=10, choices=Role.choices)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+        indexes = [
+            models.Index(
+                fields=['conversation', 'created_at'],
+                name='ai_msg_conv_created_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.role} message - Conversation {self.conversation_id}'
+
+
+class FoodItem(models.Model):
+    class FoodCategory(models.TextChoices):
+        GRAINS = 'grains', 'Grains & Cereals'
+        DAIRY = 'dairy', 'Dairy'
+        FRUITS = 'fruits', 'Fruits'
+        VEGETABLES = 'vegetables', 'Vegetables'
+        PROTEIN = 'protein', 'Protein Sources'
+        NUTS = 'nuts', 'Nuts & Seeds'
+        LEGUMES = 'legumes', 'Pulses & Legumes'
+        BEVERAGES = 'beverages', 'Beverages'
+        OTHER = 'other', 'Other'
+
+    name = models.CharField(max_length=150)
+    slug = models.SlugField(max_length=170, unique=True)
+    category = models.CharField(
+        max_length=20,
+        choices=FoodCategory.choices,
+        default=FoodCategory.OTHER,
+        db_index=True,
+    )
+
+    serving_size_g = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=100,
+    )
+    calories = models.DecimalField(max_digits=8, decimal_places=2)
+    protein_g = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+    carbohydrates_g = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+    fat_g = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+    fiber_g = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+
+    is_vegetarian = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Food item'
+        verbose_name_plural = 'Food items'
+
+    def __str__(self):
+        return self.name
+
+
+class MealEntry(models.Model):
+    class MealType(models.TextChoices):
+        BREAKFAST = 'breakfast', 'Breakfast'
+        LUNCH = 'lunch', 'Lunch'
+        DINNER = 'dinner', 'Dinner'
+        SNACK = 'snack', 'Snack'
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='meal_entries',
+    )
+    food = models.ForeignKey(
+        FoodItem,
+        on_delete=models.PROTECT,
+        related_name='meal_entries',
+    )
+    meal_type = models.CharField(
+        max_length=15,
+        choices=MealType.choices,
+        db_index=True,
+    )
+    quantity_g = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        validators=[MinValueValidator(1), MaxValueValidator(10000)],
+    )
+    meal_date = models.DateField(default=timezone.localdate, db_index=True)
+    notes = models.CharField(max_length=250, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-meal_date', '-created_at']
+        verbose_name = 'Meal entry'
+        verbose_name_plural = 'Meal entries'
+
+    def __str__(self):
+        return f'{self.food.name} - User {self.user_id} - {self.meal_date}'

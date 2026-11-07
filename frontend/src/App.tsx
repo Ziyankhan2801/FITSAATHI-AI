@@ -86,7 +86,7 @@ function App() {
             </span>
           </a>
 
-          <div className="hidden items-center gap-8 text-sm text-white/65 md:flex">
+          <div className="hidden items-center gap-8 text-sm text-[#b8bdb2] md:flex">
             <a className="transition hover:text-white" href="#features">
               Features
             </a>
@@ -117,7 +117,7 @@ function App() {
         </nav>
 
         {menuOpen && (
-          <div className="flex flex-col gap-5 border-t border-white/10 px-5 py-6 text-sm text-white/75 md:hidden">
+          <div className="flex flex-col gap-5 border-t border-white/10 px-5 py-6 text-sm text-[#c1c6bb] md:hidden">
             <a href="#features" onClick={closeMenu}>Features</a>
             <a href="#how-it-works" onClick={closeMenu}>How it works</a>
             <a href="#our-approach" onClick={closeMenu}>Our approach</a>
@@ -148,12 +148,12 @@ function App() {
             <h1 className="max-w-3xl text-5xl leading-[1.06] font-semibold tracking-[-0.055em] sm:text-6xl lg:text-[76px]">
               Stronger starts
               <br />
-              <span className="text-white/45">with one small</span>
+              <span className="text-[#b8bdb2]">with one small</span>
               <br />
               <span className="text-[#c5f66a]">step at home.</span>
             </h1>
 
-            <p className="mt-7 max-w-xl text-base leading-8 text-white/55 sm:text-lg">
+            <p className="mt-7 max-w-xl text-base leading-8 text-[#b8bdb2] sm:text-lg">
               Meet your personal home fitness companion. Get beginner-friendly
               workouts, practical guidance, and a plan that grows with you.
               No gym required.
@@ -165,19 +165,19 @@ function App() {
             >
               <a
                 href="#how-it-works"
-                className="inline-flex items-center justify-center gap-3 rounded-full bg-[#c5f66a] px-7 py-4 font-semibold text-[#10120f] transition hover:bg-[#d6ff8c]"
+                className="inline-flex items-center justify-center gap-3 rounded-full bg-[#c5f66a] px-7 py-4 font-semibold !text-[#10120f] transition hover:bg-[#d6ff8c]"
               >
                 Explore your journey <ArrowRight size={18} />
               </a>
               <a
                 href="#features"
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-7 py-4 font-medium text-white/80 transition hover:border-white/35 hover:bg-white/[0.04]"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-7 py-4 font-medium text-[#d0d3ca] transition hover:border-white/35 hover:bg-white/[0.04]"
               >
                 Discover FitSaathi <ChevronRight size={17} />
               </a>
             </div>
 
-            <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm text-white/55">
+            <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm text-[#b8bdb2]">
               <span className="flex items-center gap-2">
                 <Check size={16} className="text-[#c5f66a]" />
                 Beginner-friendly
@@ -199,7 +199,7 @@ function App() {
             <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[#191c17] p-5 shadow-2xl sm:p-7">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs tracking-[0.2em] text-white/40">
+                  <p className="text-xs tracking-[0.2em] text-[#b8bdb2]">
                     YOUR PERSONAL SPACE
                   </p>
                   <h2 className="mt-2 text-xl font-semibold">
@@ -214,7 +214,7 @@ function App() {
               <div className="mt-7 rounded-2xl border border-white/[0.07] bg-[#11130f] p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm text-white/45">Your first milestone</p>
+                    <p className="text-sm text-[#b8bdb2]">Your first milestone</p>
                     <p className="mt-2 text-2xl font-semibold tracking-tight">
                       Start where you are.
                     </p>
@@ -237,7 +237,7 @@ function App() {
                       <p className="text-lg font-semibold text-[#c5f66a]">
                         {item.value}
                       </p>
-                      <p className="mt-1 text-xs leading-5 text-white/45">
+                      <p className="mt-1 text-xs leading-5 text-[#b8bdb2]">
                         {item.label}
                       </p>
                     </div>
@@ -250,11 +250,11 @@ function App() {
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium">Your first workout</p>
-                    <p className="mt-1 text-xs text-white/40">
+                    <p className="mt-1 text-xs text-[#b8bdb2]">
                       Begin with simple movements
                     </p>
                   </div>
-                  <ArrowUpRight size={18} className="text-white/45" />
+                  <ArrowUpRight size={18} className="text-[#b8bdb2]" />
                 </div>
               </div>
 
@@ -262,7 +262,7 @@ function App() {
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#c5f66a]/20 bg-[#c5f66a]/10 text-[#c5f66a]">
                   <ShieldCheck size={20} />
                 </div>
-                <p className="text-xs leading-6 text-white/45">
+                <p className="text-xs leading-6 text-[#b8bdb2]">
                   Progress at a pace that respects your ability and recovery.
                 </p>
               </div>
@@ -299,7 +299,7 @@ function App() {
                   <br className="hidden sm:block" /> your real life.
                 </h2>
               </div>
-              <p className="max-w-md text-sm leading-7 text-white/50 sm:text-base">
+              <p className="max-w-md text-sm leading-7 text-[#b8bdb2] sm:text-base">
                 Less pressure to be perfect. More support for building habits
                 you can actually maintain.
               </p>
@@ -318,7 +318,7 @@ function App() {
                       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#c5f66a]/10 text-[#c5f66a] transition group-hover:bg-[#c5f66a] group-hover:text-[#10120f]">
                         <Icon size={23} />
                       </div>
-                      <span className="text-sm text-white/25">
+                      <span className="text-sm text-[#aeb3a8]">
                         {feature.number}
                       </span>
                     </div>
@@ -329,12 +329,12 @@ function App() {
                     <h3 className="mt-3 text-xl font-semibold tracking-tight">
                       {feature.title}
                     </h3>
-                    <p className="mt-3 text-sm leading-7 text-white/50">
+                    <p className="mt-3 text-sm leading-7 text-[#b8bdb2]">
                       {feature.description}
                     </p>
                     <a
                       href="#how-it-works"
-                      className="mt-7 inline-flex items-center gap-2 text-sm font-medium text-white/70 transition group-hover:text-[#c5f66a]"
+                      className="mt-7 inline-flex items-center gap-2 text-sm font-medium text-[#c1c6bb] transition group-hover:text-[#c5f66a]"
                     >
                       Learn more <ArrowDownRight size={16} />
                     </a>
@@ -356,7 +356,7 @@ function App() {
             <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-5xl">
               Three steps. One new habit.
             </h2>
-            <p className="mt-5 text-sm leading-7 text-white/50 sm:text-base">
+            <p className="mt-5 text-sm leading-7 text-[#b8bdb2] sm:text-base">
               You don't need to know everything to get started. You just need
               a starting point.
             </p>
@@ -369,13 +369,13 @@ function App() {
                   {step.number}
                 </div>
                 <h3 className="mt-6 text-xl font-semibold">{step.title}</h3>
-                <p className="mt-3 max-w-sm text-sm leading-7 text-white/50">
+                <p className="mt-3 max-w-sm text-sm leading-7 text-[#b8bdb2]">
                   {step.description}
                 </p>
                 {index < steps.length - 1 && (
                   <ArrowRight
                     size={22}
-                    className="absolute right-2 top-3 hidden text-white/20 md:block"
+                    className="absolute right-2 top-3 hidden text-[#aeb3a8] md:block"
                   />
                 )}
               </div>
@@ -394,7 +394,7 @@ function App() {
                 <br />
                 Your plan should be too.
               </h2>
-              <p className="mt-5 max-w-xl text-sm leading-7 text-white/55 sm:text-base">
+              <p className="mt-5 max-w-xl text-sm leading-7 text-[#b8bdb2] sm:text-base">
                 FitSaathi AI is being built around realistic routines,
                 gradual progression, and honest progress tracking. No
                 guaranteed transformations. No pressure to train through pain.
@@ -402,7 +402,7 @@ function App() {
             </div>
             <a
               href="#get-started"
-              className="inline-flex shrink-0 items-center justify-center gap-3 self-start rounded-full bg-[#c5f66a] px-6 py-4 font-semibold text-[#10120f] transition hover:bg-[#d6ff8c] lg:self-center"
+              className="inline-flex shrink-0 items-center justify-center gap-3 self-start rounded-full bg-[#c5f66a] px-6 py-4 font-semibold !text-[#10120f] transition hover:bg-[#d6ff8c] lg:self-center"
             >
               Take the first step <ArrowUpRight size={18} />
             </a>
@@ -420,17 +420,17 @@ function App() {
               FitSaathi<span className="text-[#c5f66a]">.ai</span>
             </span>
           </a>
-          <p className="text-xs leading-6 text-white/40">
+          <p className="text-xs leading-6 text-[#b8bdb2]">
             Your journey, your pace. Built for everyday progress.
           </p>
           <a
             href="#home"
-            className="text-sm text-white/55 transition hover:text-[#c5f66a]"
+            className="text-sm text-[#b8bdb2] transition hover:text-[#c5f66a]"
           >
             Back to top ↑
           </a>
         </div>
-        <p className="mx-auto mt-6 max-w-[1312px] text-xs leading-6 text-white/30">
+        <p className="mx-auto mt-6 max-w-[1312px] text-xs leading-6 text-[#aeb3a8]">
           FitSaathi AI provides general fitness guidance and is not a substitute
           for professional medical advice.
         </p>

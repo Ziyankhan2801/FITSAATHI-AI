@@ -12,6 +12,8 @@ import {
   Utensils,
   X,
   BookOpen,
+  BrainCircuit,
+  ScanFace,
 } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 
@@ -19,12 +21,10 @@ const navigationItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
   { label: 'My Workouts', icon: Dumbbell, href: '/dashboard/workouts' },
   { label: 'Exercise Library', icon: BookOpen, href: '/dashboard/exercise-library' },
-  {
-    label: 'Workout History',
-    icon: ClipboardList,
-    href: '/dashboard/workout-history',
-  },
+  { label: 'Workout History', icon: ClipboardList, href: '/dashboard/workout-history' },
   { label: 'Progress', icon: BarChart3, href: '/dashboard/progress' },
+  { label: 'AI Fitness Coach', icon: BrainCircuit, href: '/dashboard/ai-coach' },
+  { label: 'AI Camera Coach', icon: ScanFace, href: '/dashboard/camera-coach' },
   { label: 'Nutrition', icon: Utensils, href: '/dashboard/nutrition' },
   { label: 'My Schedule', icon: CalendarDays, href: '/dashboard/schedule' },
 ]
@@ -52,11 +52,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         }`}
       >
         <div className="flex h-20 items-center justify-between border-b border-white/10 px-6">
-          <Link
-            to="/"
-            onClick={onClose}
-            className="flex items-center gap-3"
-          >
+          <Link to="/" onClick={onClose} className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#c5f66a] text-[#10120f]">
               <Activity size={23} strokeWidth={2.5} />
             </span>
@@ -111,9 +107,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <HeartPulse size={19} />
           </div>
 
-          <p className="text-sm font-semibold text-white">
-            Small steps matter.
-          </p>
+          <p className="text-sm font-semibold text-white">Small steps matter.</p>
           <p className="mt-1 text-xs leading-5 text-white/45">
             Build healthy habits at your own pace.
           </p>
@@ -141,9 +135,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </span>
 
             <div>
-              <p className="text-sm font-medium text-white/80">
-                Your privacy
-              </p>
+              <p className="text-sm font-medium text-white/80">Your privacy</p>
               <p className="mt-1 text-xs text-white/40">
                 Your journey, your control
               </p>

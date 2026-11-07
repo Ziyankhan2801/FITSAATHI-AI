@@ -42,3 +42,7 @@ Thumbs.db
 # Private user uploads
 uploads/
 private_media/
+
+# Local backup files
+*.backup
+*.backup-*
