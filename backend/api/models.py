@@ -324,17 +324,19 @@ class BodyMeasurement(models.Model):
 
 
 
+
 class PrivacyConsent(models.Model):
 
     class ConsentType(models.TextChoices):
         AI_PROFILE_CONTEXT = (
-    'ai_profile_context',
-    'Personal fitness profile sharing with AI',
-)
+            'ai_profile_context',
+            'Personal fitness profile sharing with AI',
+        )
         PHOTO_STORAGE = 'photo_storage', 'Progress photo storage'
         AI_ANALYSIS = 'ai_analysis', 'AI photo analysis'
         AI_CHAT = 'ai_chat', 'AI fitness chat processing'
-        user = models.ForeignKey(
+
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='privacy_consents',
