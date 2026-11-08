@@ -99,7 +99,7 @@ function App() {
           </div>
 
           <a
-            href="#get-started"
+            href="/register"
             className="hidden items-center gap-2 rounded-full bg-[#c5f66a] px-5 py-3 text-sm font-semibold text-[#10120f] transition hover:bg-[#d6ff8c] sm:flex"
           >
             Start your journey <ArrowRight size={16} />
@@ -122,7 +122,7 @@ function App() {
             <a href="#how-it-works" onClick={closeMenu}>How it works</a>
             <a href="#our-approach" onClick={closeMenu}>Our approach</a>
             <a
-              href="#get-started"
+              href="/register"
               onClick={closeMenu}
               className="flex items-center justify-center gap-2 rounded-full bg-[#c5f66a] px-5 py-3 font-semibold text-[#10120f]"
             >
@@ -401,7 +401,7 @@ function App() {
               </p>
             </div>
             <a
-              href="#get-started"
+              href="/register"
               className="inline-flex shrink-0 items-center justify-center gap-3 self-start rounded-full bg-[#c5f66a] px-6 py-4 font-semibold !text-[#10120f] transition hover:bg-[#d6ff8c] lg:self-center"
             >
               Take the first step <ArrowUpRight size={18} />
