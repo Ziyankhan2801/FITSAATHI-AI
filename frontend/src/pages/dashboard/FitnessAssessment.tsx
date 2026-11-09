@@ -39,6 +39,15 @@ const inputClass =
 
 const labelClass = 'text-sm font-medium text-white/80'
 
+// Format a date using local calendar values, without UTC conversion.
+function getLocalDateString(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
 function Field({
   label,
   children,
@@ -62,8 +71,8 @@ export default function FitnessAssessment() {
   const [success, setSuccess] = useState('')
   const [workoutWeekdays, setWorkoutWeekdays] = useState<number[]>([])
 
-  // Calculate once instead of calling Date during every render.
-  const [maxBirthDate] = useState(() => new Date().toLocaleDateString('en-CA'))
+  // Use the browser's local date for the maximum DOB.
+  const [maxBirthDate] = useState(() => getLocalDateString(new Date()))
 
   useEffect(() => {
     let active = true
@@ -238,13 +247,27 @@ export default function FitnessAssessment() {
       return
     }
 
-    // Date of birth validation
+    // Date of birth validation (local date, no UTC conversion)
     if (form.date_of_birth) {
-      const selectedDate = new Date(`${form.date_of_birth}T00:00:00`)
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/
 
+      if (!datePattern.test(form.date_of_birth)) {
+        setError('Please enter a valid date of birth.')
+        return
+      }
+
+      const [year, month, day] = form.date_of_birth.split('-').map(Number)
+
+      const selectedDate = new Date(year, month - 1, day)
+
+      // Reject invalid calendar dates such as 31 February.
       if (
-        Number.isNaN(selectedDate.getTime()) ||
-        selectedDate.toISOString().slice(0, 10) !== form.date_of_birth
+        !year ||
+        !month ||
+        !day ||
+        selectedDate.getFullYear() !== year ||
+        selectedDate.getMonth() !== month - 1 ||
+        selectedDate.getDate() !== day
       ) {
         setError('Please enter a valid date of birth.')
         return
