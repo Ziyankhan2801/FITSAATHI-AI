@@ -18,6 +18,7 @@ from .views_account import (
 from django.urls import path
 
 from .views import (
+    EquipmentListView,
     FoodItemListView,
     MealEntryListCreateView,
     MealEntryDetailView,
@@ -125,6 +126,7 @@ urlpatterns = [
         name='progress-photo-image',
     ),
     path('exercises/', ExerciseListView.as_view(), name='exercise-list'),
+    path('equipment/', EquipmentListView.as_view(), name='equipment-list',),
     path('exercises/<int:pk>/', ExerciseDetailView.as_view(), name='exercise-detail'),
 
     # Custom Workout Plans

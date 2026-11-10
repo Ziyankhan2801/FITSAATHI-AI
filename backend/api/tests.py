@@ -1665,3 +1665,81 @@ class ProgressPhotoSecureImageAPITests(APITransactionTestCase):
             'nosniff',
         )
         response.close()
+class EquipmentListAPITests(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='equipment_test_user',
+            email='equipment_test@example.com',
+            password='TestPass123!',
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        from api.models import Equipment
+
+        self.bodyweight = Equipment.objects.create(
+            name='Bodyweight',
+            slug='bodyweight',
+            category='bodyweight',
+            description='Exercises using body weight.',
+            is_active=True,
+        )
+
+        self.dumbbell = Equipment.objects.create(
+            name='Dumbbell',
+            slug='dumbbell',
+            category='free_weights',
+            description='Free weights for strength training.',
+            is_active=True,
+        )
+
+        self.inactive = Equipment.objects.create(
+            name='Inactive Equipment',
+            slug='inactive-equipment',
+            category='accessories',
+            description='Inactive test equipment.',
+            is_active=False,
+        )
+
+    def test_authenticated_user_can_list_active_equipment(self):
+        response = self.client.get(reverse('equipment-list'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        names = [item['name'] for item in response.data]
+        self.assertIn('Bodyweight', names)
+        self.assertIn('Dumbbell', names)
+        self.assertNotIn('Inactive Equipment', names)
+
+    def test_equipment_search_by_name(self):
+        response = self.client.get(
+            reverse('equipment-list'),
+            {'search': 'Dumbbell'},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        names = [item['name'] for item in response.data]
+        self.assertEqual(names, ['Dumbbell'])
+
+    def test_equipment_ordering_by_name(self):
+        response = self.client.get(
+            reverse('equipment-list'),
+            {'ordering': 'name'},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        names = [item['name'] for item in response.data]
+        self.assertEqual(names, sorted(names))
+
+    def test_unauthenticated_user_cannot_list_equipment(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get(reverse('equipment-list'))
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )

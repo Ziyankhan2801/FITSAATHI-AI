@@ -14,8 +14,8 @@ from .services.workout_generator import generate_personalized_workout
 from rest_framework import generics, filters
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Exercise
-from .serializers import ExerciseSerializer
+from .models import Exercise, Equipment
+from .serializers import ExerciseSerializer, EquipmentSerializer
 
 import mimetypes
 
@@ -400,6 +400,19 @@ class ProgressPhotoImageView(generics.GenericAPIView):
         response['Content-Disposition'] = 'inline'
 
         return response
+
+
+class EquipmentListView(generics.ListAPIView):
+    serializer_class = EquipmentSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'category']
+    ordering = ['category', 'name']
+
+    def get_queryset(self):
+        return Equipment.objects.filter(is_active=True)
 
 
 class ExerciseListView(generics.ListAPIView):
