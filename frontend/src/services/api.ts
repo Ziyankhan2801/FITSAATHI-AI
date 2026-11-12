@@ -9,6 +9,16 @@ export interface HealthCheckResponse {
   service: string
 }
 
+export interface Equipment {
+  id: number
+  name: string
+  slug: string
+  category: string
+  description: string
+  is_active: boolean
+  created_at: string
+}
+
 export interface AuthUser {
   id: number
   username: string
@@ -26,6 +36,7 @@ interface CsrfResponse {
 }
 
 export interface FitnessProfile {
+  available_equipment: number[]
   id: number
   date_of_birth: string | null
   age: number | null
@@ -184,6 +195,20 @@ export async function getFitnessProfile(): Promise<FitnessProfile> {
 
   return (await response.json()) as FitnessProfile
 }
+
+export async function getEquipment(): Promise<Equipment[]> {
+  const response = await apiFetch(`${API_BASE_URL}/equipment/`, {
+    method: 'GET',
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  return (await response.json()) as Equipment[]
+}
+
 
 export async function updateFitnessProfile(
   data: FitnessProfileUpdate,

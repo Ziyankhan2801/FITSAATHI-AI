@@ -2,7 +2,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { ArrowLeft, CheckCircle2, LoaderCircle, Save, Target } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { getFitnessProfile, updateFitnessProfile } from '../../services/api'
+import {
+  getEquipment,
+  getFitnessProfile,
+  updateFitnessProfile,
+  type Equipment,
+} from '../../services/api'
 
 type FitnessForm = {
   date_of_birth: string
@@ -70,6 +75,9 @@ export default function FitnessAssessment() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [workoutWeekdays, setWorkoutWeekdays] = useState<number[]>([])
+  const [equipmentOptions, setEquipmentOptions] = useState<Equipment[]>([])
+  const [selectedEquipment, setSelectedEquipment] = useState<number[]>([])
+  const [equipmentLoading, setEquipmentLoading] = useState(true)
 
   // Use the browser's local date for the maximum DOB.
   const [maxBirthDate] = useState(() => getLocalDateString(new Date()))
@@ -82,6 +90,7 @@ export default function FitnessAssessment() {
         if (!active) return
 
         setWorkoutWeekdays(profile.workout_weekdays ?? [])
+        setSelectedEquipment(profile.available_equipment ?? [])
 
         const validGoals = [
           'weight_loss',
@@ -158,6 +167,33 @@ export default function FitnessAssessment() {
     }
   }, [])
 
+  useEffect(() => {
+    let active = true
+
+    getEquipment()
+      .then((equipment) => {
+        if (active) {
+          setEquipmentOptions(equipment.filter((item) => item.is_active))
+        }
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Could not load available equipment.',
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setEquipmentLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
   function updateField<K extends keyof FitnessForm>(
     field: K,
     value: FitnessForm[K],
@@ -166,6 +202,18 @@ export default function FitnessAssessment() {
     setError('')
     setSuccess('')
   }
+
+  function toggleEquipment(equipmentId: number) {
+    setSelectedEquipment((current) =>
+      current.includes(equipmentId)
+        ? current.filter((id) => id !== equipmentId)
+        : [...current, equipmentId],
+    )
+
+    setError('')
+    setSuccess('')
+  }
+
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -286,6 +334,7 @@ export default function FitnessAssessment() {
 
     try {
       await updateFitnessProfile({
+        available_equipment: selectedEquipment,
         date_of_birth: form.date_of_birth || null,
         height_cm: height,
         weight_kg: weight,
@@ -488,18 +537,58 @@ export default function FitnessAssessment() {
               </select>
             </Field>
 
-            <Field label="Available equipment">
+            <Field label="Equipment level">
               <select
                 className={inputClass}
                 value={form.equipment_level}
                 onChange={(e) => updateField('equipment_level', e.target.value)}
               >
-                <option value="">Choose equipment</option>
+                <option value="">Choose equipment level</option>
                 <option value="none">No equipment</option>
                 <option value="basic">Basic equipment</option>
                 <option value="home_gym">Home gym equipment</option>
               </select>
             </Field>
+
+            <div className="sm:col-span-2">
+              <div className="mb-3">
+                <p className="text-sm font-medium text-white/80">
+                  Select your equipment
+                </p>
+                <p className="mt-1 text-xs text-white/45">
+                  Choose all equipment you have access to. You can select more than one.
+                </p>
+              </div>
+
+              {equipmentLoading ? (
+                <p className="text-sm text-white/50">Loading equipment...</p>
+              ) : equipmentOptions.length === 0 ? (
+                <p className="text-sm text-white/50">
+                  No equipment options are currently available.
+                </p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {equipmentOptions.map((item) => (
+                    <label
+                      key={item.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-[#10120f] p-4 text-sm text-white/80 transition hover:border-[#c5f66a]/40"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedEquipment.includes(item.id)}
+                        onChange={() => toggleEquipment(item.id)}
+                        className="h-4 w-4 accent-[#c5f66a]"
+                      />
+                      <span>{item.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <p className="mt-3 text-xs text-white/40">
+                {selectedEquipment.length} selected
+              </p>
+            </div>
 
             <Field label="Dietary preference">
               <select
