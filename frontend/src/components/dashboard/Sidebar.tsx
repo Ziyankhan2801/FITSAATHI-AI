@@ -129,18 +129,28 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             Settings
           </NavLink>
 
-          <div className="mt-2 flex items-center gap-3 px-4 py-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70">
-              <ShieldCheck size={19} />
-            </span>
+          <NavLink
+  to="/dashboard/settings#privacy-settings"
+  onClick={onClose}
+  className={({ isActive }) =>
+    `mt-2 flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
+      isActive
+        ? 'bg-[#c5f66a]/10 text-[#c5f66a]'
+        : 'text-white/55 hover:bg-white/5 hover:text-white'
+    }`
+  }
+>
+  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70">
+    <ShieldCheck size={19} />
+  </span>
 
-            <div>
-              <p className="text-sm font-medium text-white/80">Your privacy</p>
-              <p className="mt-1 text-xs text-white/40">
-                Your journey, your control
-              </p>
-            </div>
-          </div>
+  <div>
+    <p className="font-medium">Your privacy</p>
+    <p className="mt-1 text-xs text-white/40">
+      Your journey, your control
+    </p>
+  </div>
+</NavLink>
         </div>
       </aside>
     </>

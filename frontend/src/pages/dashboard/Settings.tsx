@@ -17,7 +17,7 @@ import {
   LockKeyhole,
 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import {
   getPrivacyConsents,
@@ -66,6 +66,7 @@ const consentOptions: {
 
 export default function Settings() {
   const { user } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
 
   const [consents, setConsents] = useState<PrivacyConsent[]>([])
@@ -83,6 +84,15 @@ export default function Settings() {
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    if (location.hash !== '#privacy-settings') return
+
+    document.getElementById('privacy-settings')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }, [location.hash])
 
   useEffect(() => {
     let isMounted = true
@@ -369,7 +379,10 @@ export default function Settings() {
       </section>
 
       {/* Privacy Settings */}
-      <section className="rounded-2xl border border-white/10 bg-[#171a15] p-5 sm:p-6">
+      <section
+        id="privacy-settings"
+        className="scroll-mt-6 rounded-2xl border border-white/10 bg-[#171a15] p-5 sm:p-6"
+      >
         <div className="mb-6 flex items-start gap-3">
           <div className="rounded-xl bg-white/5 p-2.5 text-[#c5f66a]">
             <ShieldCheck size={20} />

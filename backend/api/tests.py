@@ -1743,3 +1743,281 @@ class EquipmentListAPITests(APITestCase):
             response.status_code,
             status.HTTP_403_FORBIDDEN,
         )
+
+
+
+class DeleteMyAccountAPITests(APITestCase):
+
+    def setUp(self):
+        self.password = 'TestPass123!'
+        self.user = User.objects.create_user(
+            username='deleteuser',
+            email='delete@example.com',
+            password=self.password,
+        )
+
+        self.url = reverse('account-delete')
+
+    def test_delete_account_requires_authentication(self):
+        response = self.client.post(
+            self.url,
+            {'password': self.password},
+            format='json',
+        )
+
+        self.assertIn(
+            response.status_code,
+            [
+                status.HTTP_401_UNAUTHORIZED,
+                status.HTTP_403_FORBIDDEN,
+            ],
+        )
+
+        self.assertTrue(User.objects.filter(pk=self.user.pk).exists())
+
+    def test_delete_account_requires_password(self):
+        self.client.login(
+            username='deleteuser',
+            password=self.password,
+        )
+
+        response = self.client.post(
+            self.url,
+            {},
+            format='json',
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.assertTrue(User.objects.filter(pk=self.user.pk).exists())
+
+    def test_delete_account_rejects_incorrect_password(self):
+        self.client.login(
+            username='deleteuser',
+            password=self.password,
+        )
+
+        response = self.client.post(
+            self.url,
+            {'password': 'WrongPassword123!'},
+            format='json',
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.assertTrue(User.objects.filter(pk=self.user.pk).exists())
+
+        current_user_response = self.client.get(
+            reverse('current-user')
+        )
+
+        self.assertEqual(
+            current_user_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+
+    def test_delete_account_removes_user_and_related_records(self):
+        from api.models import (
+            FitnessProfile,
+            WorkoutSession,
+            WorkoutHistory,
+            BodyMeasurement,
+            PrivacyConsent,
+            WorkoutPlan,
+            WorkoutPlanExercise,
+            Exercise,
+            AIConversation,
+            AIMessage,
+            FoodItem,
+            MealEntry,
+        )
+        from api.models_nutrition_additions import (
+            NutritionSettings,
+            WaterIntake,
+            SleepLog,
+        )
+
+        self.client.login(
+            username='deleteuser',
+            password=self.password,
+        )
+
+        FitnessProfile.objects.create(
+            user=self.user,
+            height_cm=170,
+            weight_kg=85,
+            fitness_goal='weight_loss',
+            experience_level='beginner',
+            workout_days_per_week=3,
+            workout_minutes=30,
+        )
+
+        WorkoutSession.objects.create(
+            user=self.user,
+            workout_day=1,
+            workout_title='Test workout',
+        )
+
+        WorkoutHistory.objects.create(
+            user=self.user,
+            workout_day=1,
+            workout_title='Test workout',
+            completed_exercises=[],
+            total_exercises=0,
+            completion_percentage=100,
+            workout_date=timezone.localdate(),
+            completed_at=timezone.now(),
+        )
+
+        BodyMeasurement.objects.create(
+            user=self.user,
+            weight_kg=85,
+        )
+
+        PrivacyConsent.objects.create(
+            user=self.user,
+            consent_type=PrivacyConsent.ConsentType.PHOTO_STORAGE,
+        )
+
+        workout_plan = WorkoutPlan.objects.create(
+            user=self.user,
+            workout_day=1,
+            title='Test plan',
+            focus='Testing',
+        )
+
+        exercise = Exercise.objects.create(
+            name='Account deletion test exercise',
+            slug='account-deletion-test-exercise',
+            description='Exercise created for account deletion testing.',
+            category=Exercise.Category.STRENGTH,
+            muscle_group=Exercise.MuscleGroup.CHEST,
+        )
+
+        WorkoutPlanExercise.objects.create(
+            workout_plan=workout_plan,
+            exercise=exercise,
+        )
+
+        conversation = AIConversation.objects.create(
+            user=self.user,
+            title='Test conversation',
+        )
+
+        AIMessage.objects.create(
+            conversation=conversation,
+            role=AIMessage.Role.USER,
+            content='Test message',
+        )
+
+        food = FoodItem.objects.create(
+            name='Account deletion test food',
+            slug='account-deletion-test-food',
+            calories=100,
+        )
+
+        MealEntry.objects.create(
+            user=self.user,
+            food=food,
+            meal_type='breakfast',
+            quantity_g=100,
+        )
+
+        NutritionSettings.objects.create(
+            user=self.user,
+            biological_sex='male',
+        )
+
+        WaterIntake.objects.create(
+            user=self.user,
+            amount_ml=250,
+        )
+
+        SleepLog.objects.create(
+            user=self.user,
+            duration_minutes=480,
+            quality='good',
+        )
+
+        user_id = self.user.pk
+        workout_plan_id = workout_plan.pk
+        conversation_id = conversation.pk
+        food_id = food.pk
+        exercise_id = exercise.pk
+
+        response = self.client.post(
+            self.url,
+            {'password': self.password},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertFalse(User.objects.filter(pk=user_id).exists())
+
+        self.assertFalse(
+            FitnessProfile.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            WorkoutSession.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            WorkoutHistory.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            BodyMeasurement.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            PrivacyConsent.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            WorkoutPlan.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            WorkoutPlanExercise.objects.filter(
+                workout_plan_id=workout_plan_id
+            ).exists()
+        )
+        self.assertFalse(
+            AIConversation.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            AIMessage.objects.filter(
+                conversation_id=conversation_id
+            ).exists()
+        )
+        self.assertFalse(
+            NutritionSettings.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            WaterIntake.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            SleepLog.objects.filter(user_id=user_id).exists()
+        )
+        self.assertFalse(
+            MealEntry.objects.filter(user_id=user_id).exists()
+        )
+
+        # Shared catalog records must remain untouched.
+        self.assertTrue(FoodItem.objects.filter(pk=food_id).exists())
+        self.assertTrue(Exercise.objects.filter(pk=exercise_id).exists())
+
+        current_user_response = self.client.get(
+            reverse('current-user')
+        )
+
+        self.assertIn(
+            current_user_response.status_code,
+            [
+                status.HTTP_401_UNAUTHORIZED,
+                status.HTTP_403_FORBIDDEN,
+            ],
+        )
